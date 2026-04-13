@@ -4,7 +4,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        shark: {
+        mx: {
           bg: "#0f0f1a",
           surface: "#1a1a2e",
           border: "#2a2a4a",

@@ -1,5 +1,6 @@
 mod pty;
 mod code_server;
+mod context;
 
 use tauri::Manager;
 
@@ -7,6 +8,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(pty::PtyManager::new())
         .manage(code_server::CodeServerManager::new())
+        .manage(context::ContextManager::new())
         .invoke_handler(tauri::generate_handler![
             // PTY lifecycle
             pty::commands::spawn_pty,
@@ -18,6 +20,9 @@ pub fn run() {
             code_server::commands::start_code_server,
             code_server::commands::stop_code_server,
             code_server::commands::code_server_status,
+            // context orchestration
+            context::commands::sync_canvas,
+            context::commands::send_interrupt,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]
@@ -37,5 +42,5 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("failed to run shark-canvas");
+        .expect("failed to run maestri-x");
 }

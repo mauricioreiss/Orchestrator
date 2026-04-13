@@ -1,6 +1,6 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for Shark Canvas",
+  "description": "Default capabilities for Maestri-X",
   "windows": ["main"],
   "permissions": [
     "core:default",

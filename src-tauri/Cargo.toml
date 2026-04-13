@@ -1,10 +1,10 @@
 [package]
-name = "shark-canvas"
+name = "maestri-x"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "shark_canvas_lib"
+name = "maestri_x_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]

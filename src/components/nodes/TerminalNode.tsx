@@ -1,5 +1,11 @@
-import { memo, useRef } from "react";
-import { Handle, Position, NodeResizer, type NodeProps } from "@xyflow/react";
+import { memo, useRef, useEffect } from "react";
+import {
+  Handle,
+  Position,
+  NodeResizer,
+  useReactFlow,
+  type NodeProps,
+} from "@xyflow/react";
 import { usePty } from "../../hooks/usePty";
 import "@xterm/xterm/css/xterm.css";
 
@@ -17,9 +23,14 @@ const NODE_BORDER_COLORS: Record<string, string> = {
   CyberSec: "#ef4444",
 };
 
-function TerminalNode({ data, selected }: NodeProps) {
+function TerminalNode({ id, data, selected }: NodeProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const nodeData = data as { label?: string; role?: string; cwd?: string };
+  const nodeData = data as {
+    label?: string;
+    role?: string;
+    cwd?: string;
+    ptyId?: string;
+  };
 
   const label = nodeData.label ?? "Terminal";
   const role = nodeData.role ?? "Agent";
@@ -29,6 +40,18 @@ function TerminalNode({ data, selected }: NodeProps) {
     cwd: nodeData.cwd,
     label,
   });
+
+  // Propagate ptyId back to node data so sync_canvas can match PTY ↔ node
+  const { setNodes } = useReactFlow();
+  useEffect(() => {
+    if (ptyId && ptyId !== nodeData.ptyId) {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, ptyId } } : n,
+        ),
+      );
+    }
+  }, [ptyId, id, nodeData.ptyId, setNodes]);
 
   const badgeClass = ROLE_COLORS[role] ?? ROLE_COLORS.Agent;
   const borderColor = NODE_BORDER_COLORS[role] ?? NODE_BORDER_COLORS.Agent;
@@ -93,16 +116,16 @@ function TerminalNode({ data, selected }: NodeProps) {
         </div>
       </div>
 
-      {/* Connection handles for data pipes (Phase 4) */}
+      {/* Connection handles */}
       <Handle
         type="target"
         position={Position.Left}
-        className="!w-3 !h-3 !bg-shark-accent !border-2 !border-[#181825]"
+        className="!w-3 !h-3 !bg-mx-accent !border-2 !border-[#181825]"
       />
       <Handle
         type="source"
         position={Position.Right}
-        className="!w-3 !h-3 !bg-shark-accent !border-2 !border-[#181825]"
+        className="!w-3 !h-3 !bg-mx-accent !border-2 !border-[#181825]"
       />
     </>
   );

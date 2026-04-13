@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    shark_canvas_lib::run();
+    maestri_x_lib::run();
 }
