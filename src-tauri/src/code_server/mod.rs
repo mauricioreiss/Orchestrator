@@ -2,6 +2,7 @@ pub mod commands;
 
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
+use tauri::Emitter;
 
 use serde::Serialize;
 

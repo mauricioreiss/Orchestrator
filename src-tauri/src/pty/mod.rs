@@ -3,6 +3,7 @@ pub mod commands;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::Mutex;
+use tauri::Emitter;
 
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
