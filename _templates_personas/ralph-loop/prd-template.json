@@ -1,0 +1,29 @@
+{
+  "project": "PROJECT_NAME",
+  "description": "Brief description of what we're building",
+  "branch": "main",
+  "stories": [
+    {
+      "id": "1",
+      "title": "Story title (imperative: Create X, Implement Y, Add Z)",
+      "description": "Detailed description of what to implement. Include: what files to create/modify, what the expected behavior is, what patterns to follow.",
+      "acceptance_criteria": [
+        "Specific, testable criterion 1",
+        "Specific, testable criterion 2",
+        "npm run build / cargo build / go build passes"
+      ],
+      "passes": false
+    },
+    {
+      "id": "2",
+      "title": "Next story...",
+      "description": "Each story must be completable in ONE context window. If it's too big, split it.",
+      "acceptance_criteria": [
+        "Keep stories small and focused",
+        "One concern per story",
+        "Build passes after each story"
+      ],
+      "passes": false
+    }
+  ]
+}

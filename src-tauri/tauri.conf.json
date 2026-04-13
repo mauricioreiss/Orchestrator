@@ -1,0 +1,33 @@
+{
+  "productName": "Shark Canvas",
+  "version": "0.1.0",
+  "identifier": "com.oduo.shark-canvas",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "title": "Shark Canvas",
+    "windows": [
+      {
+        "title": "Shark Canvas",
+        "label": "main",
+        "width": 1400,
+        "height": 900,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}

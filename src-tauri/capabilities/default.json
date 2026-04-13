@@ -1,0 +1,19 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for Shark Canvas",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:default",
+    "core:window:allow-set-title",
+    "allow-spawn-pty",
+    "allow-write-pty",
+    "allow-resize-pty",
+    "allow-kill-pty",
+    "allow-list-ptys",
+    "allow-start-code-server",
+    "allow-stop-code-server",
+    "allow-code-server-status"
+  ]
+}

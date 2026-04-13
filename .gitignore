@@ -1,0 +1,12 @@
+node_modules/
+dist/
+target/
+.env
+*.exe
+*.msi
+*.nsis
+*.deb
+*.rpm
+*.AppImage
+.DS_Store
+Thumbs.db

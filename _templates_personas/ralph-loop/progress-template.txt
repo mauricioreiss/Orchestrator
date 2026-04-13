@@ -1,0 +1,4 @@
+# Progress Log — PROJECT_NAME
+# Append-only. Each iteration adds learnings here.
+# Format: [story-id] what was done | what was learned
+
