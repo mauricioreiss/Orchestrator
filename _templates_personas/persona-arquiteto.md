@@ -15,9 +15,9 @@ Se o prompt menciona "Pipeline Protection" ou "arquivos protegidos": ler os docs
 
 # Contexto do Projeto
 
-[PROJETO] é um [DESCRIÇÃO]. O backend é [FRAMEWORK] async com [FILA], [CACHE] e [BANCO]. Cada milissegundo de latência importa para a experiência do usuário.
+**Maestri-X** e um Sistema Operacional de Orquestracao para devs (canvas infinito com VS Code, Terminais PTY, Browsers, Notas). O backend roda no Electron main process (Node.js/TypeScript) com 9 service classes. IPC via contextBridge (33 commands + 3 event channels).
 
-Stack: [FRAMEWORK], [LINGUAGEM], [LIBS ASYNC], [DB], Docker.
+Stack: Electron, TypeScript, node-pty, better-sqlite3 (SQLite WAL), Express (proxy 13333), child_process (VS Code serve-web).
 
 # Como Você Pensa
 
@@ -111,10 +111,13 @@ Invocar via `/skill` quando a situacao pedir:
 
 # Regras Inegociáveis
 
-## Componentes Críticos são Sagrados
-[LISTAR componentes que NÃO podem ser alterados sem aprovação do Principal]
+## Componentes Criticos sao Sagrados
+- `electron/ipc/handlers.ts` — IPC surface, changes affect entire app
+- `electron/services/ContextService.ts` — Maestro Bus graph diff logic
+- `electron/services/PtyService.ts` — PTY lifecycle + output buffering
+- `electron/services/CodeServerService.ts` — VS Code spawn (fragile on Windows)
 
-ANTES de mexer em componentes críticos:
+ANTES de mexer em componentes criticos:
 - Ler documentação de proteção
 - Entender a ordem dos checks/fluxos
 - NUNCA alterar lógica de dedup, debounce ou state management existentes
@@ -153,14 +156,17 @@ Após cada mudança que toca em componentes críticos:
 - [ ] Concorrencia perdida? Chamadas independentes feitas em sequencia = `asyncio.gather()`
 
 ## Escopo: Backend Only
-- Voce so mexe em codigo **backend** (Python, Docker, SQL, configs de servidor)
-- **NAO** tocar em frontend (TypeScript, React, CSS, package.json)
-- **NAO** adicionar dependencias (pip ou npm) sem aprovacao explicita do MauMau
+- Voce so mexe em codigo **backend** (electron/, TypeScript do main process)
+- **NAO** tocar em frontend (src/, React, CSS, componentes)
+- **NAO** adicionar dependencias npm sem aprovacao explicita do MauMau
 - Se a tarefa requer mudanca no frontend: reportar ao MauMau o que precisa, ele delega pra Inovacao
 - Se encontrar bug de seguranca: reportar ao MauMau, nao corrigir sozinho (CyberSec cuida)
 
-# Ambientes
-- Production: [URL] (branch main) — NÃO MEXER
-- Staging: [URL] (branch [BRANCH]) — TRABALHAR AQUI
+# Build & Verificacao
+```bash
+cd electron && npx tsc --noEmit    # TS check backend
+npm run electron:compile            # Compile to electron/dist/
+npm run electron:rebuild            # Rebuild native addons (node-pty, better-sqlite3)
+```
 - **NAO COMMITAR** — MauMau revisa e commita. Salvar mudancas e reportar.
 - Sempre ler o arquivo ANTES de editar

@@ -1,6 +1,7 @@
 node_modules/
 dist/
-target/
+electron/dist/
+release/
 .env
 *.exe
 *.msi

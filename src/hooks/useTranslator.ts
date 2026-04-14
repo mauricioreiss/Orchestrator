@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "../lib/tauri";
+import { invoke } from "../lib/electron";
+import { isElectron } from "../lib/electron";
 import type { TranslateResult } from "../types";
 
 export type TranslatorStatus = "idle" | "translating" | "success" | "error";
@@ -29,7 +29,7 @@ export function useTranslator(): UseTranslatorReturn {
       cwd: string,
       role: string,
     ): Promise<TranslateResult | null> => {
-      if (!isTauri()) return null;
+      if (!isElectron()) return null;
       if (!noteContent.trim()) {
         setError("Note is empty");
         setStatus("error");

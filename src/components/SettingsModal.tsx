@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "../lib/tauri";
+import { invoke } from "../lib/electron";
+import { AnimatePresence, motion } from "framer-motion";
+import { isElectron } from "../lib/electron";
 
 interface SettingsModalProps {
   open: boolean;
@@ -19,9 +20,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Load current settings
   useEffect(() => {
-    if (!open || !isTauri()) return;
+    if (!open || !isElectron()) return;
 
     Promise.all([
       invoke<string | null>("get_setting", { key: "translator_provider" }),
@@ -35,7 +35,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   }, [open]);
 
   const handleSave = useCallback(async () => {
-    if (!isTauri()) return;
+    if (!isElectron()) return;
     setSaving(true);
     try {
       await invoke("set_setting", { key: "translator_provider", value: provider });
@@ -53,120 +53,181 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     }
   }, [provider, apiKey, model]);
 
-  if (!open) return null;
+  // ESC to close
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [open, onClose]);
 
   const currentDefault = PROVIDERS.find((p) => p.value === provider)?.defaultModel ?? "";
 
   return (
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-[460px] rounded-xl overflow-hidden shadow-2xl"
-        style={{
-          background: "rgba(24,24,37,0.95)",
-          border: "1px solid rgba(49,50,68,0.6)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3 bg-[#11111b]/80 border-b border-[#313244]/50">
-          <h2 className="text-sm font-semibold text-[#cdd6f4]">
-            Maestro Translator Settings
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-[#6c7086] hover:text-[#cdd6f4] transition-colors text-lg leading-none"
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+          onClick={onClose}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          <motion.div
+            className="w-[460px] rounded-xl overflow-hidden"
+            style={{
+              background: "var(--mx-glass-bg)",
+              border: "1px solid var(--mx-glass-border)",
+              boxShadow: "0 0 40px var(--mx-accent-glow), 0 16px 64px rgba(0,0,0,0.3)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            transition={{ duration: 0.15, ease: "easeOut" }}
           >
-            x
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="p-5 space-y-4">
-          {/* Provider selector */}
-          <div>
-            <label className="block text-xs font-medium text-[#a6adc8] mb-1.5">
-              AI Provider
-            </label>
-            <div className="flex gap-2">
-              {PROVIDERS.map((p) => (
-                <button
-                  key={p.value}
-                  onClick={() => setProvider(p.value)}
-                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                    provider === p.value
-                      ? "bg-violet-500/30 text-violet-300 border border-violet-500/50"
-                      : "bg-[#1e1e2e] text-[#6c7086] border border-[#313244]/50 hover:text-[#a6adc8]"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
+            {/* Header */}
+            <div
+              className="flex items-center justify-between px-5 py-3"
+              style={{ background: "var(--mx-titlebar)", borderBottom: "1px solid var(--mx-border)" }}
+            >
+              <h2 className="text-sm font-semibold" style={{ color: "var(--mx-text)" }}>
+                Maestro Translator Settings
+              </h2>
+              <button
+                onClick={onClose}
+                className="w-7 h-7 flex items-center justify-center rounded transition-colors"
+                style={{ color: "var(--mx-text-muted)" }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = "rgba(239,68,68,0.15)";
+                  e.currentTarget.style.color = "#ef4444";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = "transparent";
+                  e.currentTarget.style.color = "var(--mx-text-muted)";
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                </svg>
+              </button>
             </div>
-          </div>
 
-          {/* API Key */}
-          <div>
-            <label className="block text-xs font-medium text-[#a6adc8] mb-1.5">
-              API Key
-            </label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={`${provider === "openai" ? "sk-..." : "sk-ant-..."}`}
-              className="w-full px-3 py-2 rounded-lg bg-[#1e1e2e] border border-[#313244]/50 text-sm text-[#cdd6f4] placeholder-[#6c7086] outline-none focus:border-violet-500/50"
-            />
-          </div>
+            {/* Body */}
+            <div className="p-5 space-y-4">
+              {/* Provider selector */}
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--mx-text-secondary)" }}>
+                  AI Provider
+                </label>
+                <div className="flex gap-2">
+                  {PROVIDERS.map((p) => (
+                    <button
+                      key={p.value}
+                      onClick={() => setProvider(p.value)}
+                      className="flex-1 py-2 rounded-lg text-sm font-medium transition-all"
+                      style={{
+                        background: provider === p.value ? "var(--mx-accent-glow)" : "var(--mx-input-bg)",
+                        color: provider === p.value ? "var(--mx-accent)" : "var(--mx-text-muted)",
+                        border: `1px solid ${provider === p.value ? "var(--mx-accent)" : "var(--mx-input-border)"}`,
+                        opacity: provider === p.value ? 1 : 0.8,
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-          {/* Model */}
-          <div>
-            <label className="block text-xs font-medium text-[#a6adc8] mb-1.5">
-              Model
-              <span className="text-[#6c7086] ml-1">(default: {currentDefault})</span>
-            </label>
-            <input
-              type="text"
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              placeholder={currentDefault}
-              className="w-full px-3 py-2 rounded-lg bg-[#1e1e2e] border border-[#313244]/50 text-sm text-[#cdd6f4] placeholder-[#6c7086] outline-none focus:border-violet-500/50"
-            />
-          </div>
+              {/* API Key */}
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--mx-text-secondary)" }}>
+                  API Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={`${provider === "openai" ? "sk-..." : "sk-ant-..."}`}
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors"
+                  style={{
+                    background: "var(--mx-input-bg)",
+                    border: "1px solid var(--mx-input-border)",
+                    color: "var(--mx-text)",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "var(--mx-accent)")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "var(--mx-input-border)")}
+                />
+              </div>
 
-          {/* Info */}
-          <div className="p-3 rounded-lg bg-[#11111b]/60 border border-[#313244]/30">
-            <p className="text-[11px] text-[#6c7086] leading-relaxed">
-              API keys are stored locally in SQLite. They never leave your machine
-              except when calling the provider API directly.
-            </p>
-          </div>
-        </div>
+              {/* Model */}
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: "var(--mx-text-secondary)" }}>
+                  Model
+                  <span className="ml-1" style={{ color: "var(--mx-text-muted)" }}>(default: {currentDefault})</span>
+                </label>
+                <input
+                  type="text"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder={currentDefault}
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors"
+                  style={{
+                    background: "var(--mx-input-bg)",
+                    border: "1px solid var(--mx-input-border)",
+                    color: "var(--mx-text)",
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = "var(--mx-accent)")}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = "var(--mx-input-border)")}
+                />
+              </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-5 py-3 bg-[#11111b]/80 border-t border-[#313244]/50">
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-lg text-sm text-[#6c7086] hover:text-[#cdd6f4] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving || !apiKey}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              saved
-                ? "bg-emerald-500/30 text-emerald-300"
-                : "bg-violet-500/30 text-violet-300 hover:bg-violet-500/40"
-            } disabled:opacity-40 disabled:cursor-not-allowed`}
-          >
-            {saving ? "Saving..." : saved ? "Saved" : "Save"}
-          </button>
-        </div>
-      </div>
-    </div>
+              {/* Info */}
+              <div
+                className="p-3 rounded-lg"
+                style={{ background: "var(--mx-surface-alt)", border: "1px solid var(--mx-border)" }}
+              >
+                <p className="text-[11px] leading-relaxed" style={{ color: "var(--mx-text-muted)" }}>
+                  API keys are stored locally in SQLite. They never leave your machine
+                  except when calling the provider API directly.
+                </p>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div
+              className="flex items-center justify-end gap-3 px-5 py-3"
+              style={{ background: "var(--mx-titlebar)", borderTop: "1px solid var(--mx-border)" }}
+            >
+              <button
+                onClick={onClose}
+                className="px-4 py-1.5 rounded-lg text-sm transition-colors"
+                style={{ color: "var(--mx-text-muted)" }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "var(--mx-text)")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "var(--mx-text-muted)")}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving || !apiKey}
+                className="px-4 py-1.5 rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{
+                  background: saved ? "rgba(16,185,129,0.2)" : "var(--mx-accent-glow)",
+                  color: saved ? "#10b981" : "var(--mx-accent)",
+                  border: `1px solid ${saved ? "rgba(16,185,129,0.3)" : "var(--mx-accent)"}`,
+                }}
+              >
+                {saving ? "Saving..." : saved ? "Saved" : "Save"}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

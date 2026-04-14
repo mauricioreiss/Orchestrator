@@ -16,17 +16,12 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
   const { setNodes } = useReactFlow();
   const { syncDebounced } = useCanvasSync();
 
-  // Sync label from external updates (e.g., undo)
-  useEffect(() => {
-    setLabel(nodeData.label ?? "Project");
-  }, [nodeData.label]);
+  useEffect(() => { setLabel(nodeData.label ?? "Project"); }, [nodeData.label]);
 
   const commitLabel = useCallback(() => {
     setEditing(false);
     setNodes((nds) =>
-      nds.map((n) =>
-        n.id === id ? { ...n, data: { ...n.data, label } } : n,
-      ),
+      nds.map((n) => n.id === id ? { ...n, data: { ...n.data, label } } : n),
     );
     syncDebounced();
   }, [id, label, setNodes, syncDebounced]);
@@ -34,9 +29,7 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
   const handleColorChange = useCallback(
     (newColor: string) => {
       setNodes((nds) =>
-        nds.map((n) =>
-          n.id === id ? { ...n, data: { ...n.data, color: newColor } } : n,
-        ),
+        nds.map((n) => n.id === id ? { ...n, data: { ...n.data, color: newColor } } : n),
       );
       setPickerOpen(false);
       syncDebounced();
@@ -44,10 +37,7 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
     [id, setNodes, syncDebounced],
   );
 
-  // Focus input when editing starts
-  useEffect(() => {
-    if (editing) inputRef.current?.focus();
-  }, [editing]);
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
 
   return (
     <>
@@ -56,12 +46,7 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
         minWidth={600}
         minHeight={400}
         lineStyle={{ borderColor: color }}
-        handleStyle={{
-          width: 10,
-          height: 10,
-          backgroundColor: color,
-          borderColor: color,
-        }}
+        handleStyle={{ width: 10, height: 10, backgroundColor: color, borderColor: color }}
       />
 
       <div
@@ -77,33 +62,23 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
         {/* Title bar */}
         <div
           className="flex items-center justify-between px-3 py-1.5 select-none cursor-grab active:cursor-grabbing"
-          style={{
-            background: color + "1A",
-            borderRadius: "10px 10px 0 0",
-          }}
+          style={{ background: color + "1A", borderRadius: "10px 10px 0 0" }}
         >
           {editing ? (
             <input
               ref={inputRef}
-              className="bg-transparent text-sm font-semibold outline-none border-b border-white/30 nodrag"
-              style={{ color }}
+              className="bg-transparent text-sm font-semibold outline-none border-b nodrag"
+              style={{ color, borderColor: "var(--mx-border-strong)" }}
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               onBlur={commitLabel}
               onKeyDown={(e) => {
                 if (e.key === "Enter") commitLabel();
-                if (e.key === "Escape") {
-                  setLabel(nodeData.label ?? "Project");
-                  setEditing(false);
-                }
+                if (e.key === "Escape") { setLabel(nodeData.label ?? "Project"); setEditing(false); }
               }}
             />
           ) : (
-            <span
-              className="text-sm font-semibold cursor-text"
-              style={{ color }}
-              onDoubleClick={() => setEditing(true)}
-            >
+            <span className="text-sm font-semibold cursor-text" style={{ color }} onDoubleClick={() => setEditing(true)}>
               {label}
             </span>
           )}
@@ -118,10 +93,7 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
             {pickerOpen && (
               <div
                 className="absolute right-0 top-full mt-1 z-50 flex gap-1.5 p-2 rounded-lg"
-                style={{
-                  background: "rgba(30,30,46,0.95)",
-                  border: "1px solid #313244",
-                }}
+                style={{ background: "var(--mx-surface)", border: "1px solid var(--mx-border-strong)" }}
               >
                 {GROUP_COLORS.map((c) => (
                   <button
@@ -130,10 +102,7 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
                     className="w-4 h-4 rounded-full hover:scale-125 transition-transform"
                     style={{
                       backgroundColor: c,
-                      border:
-                        c === color
-                          ? "2px solid white"
-                          : "2px solid transparent",
+                      border: c === color ? "2px solid white" : "2px solid transparent",
                     }}
                   />
                 ))}

@@ -1,7 +1,103 @@
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource-variable/jetbrains-mono";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ===== Dark Theme (default) ===== */
+:root,
+[data-theme="dark"] {
+  --mx-bg: #0a0a0f;
+  --mx-surface: #111118;
+  --mx-surface-alt: #1a1a24;
+  --mx-border: rgba(255, 255, 255, 0.06);
+  --mx-border-strong: rgba(255, 255, 255, 0.12);
+  --mx-text: #e4e4e7;
+  --mx-text-secondary: #a1a1aa;
+  --mx-text-muted: #52525b;
+
+  /* Glassmorphism */
+  --mx-glass-bg: rgba(17, 17, 24, 0.85);
+  --mx-glass-border: rgba(255, 255, 255, 0.06);
+  --mx-titlebar: rgba(10, 10, 15, 0.8);
+  --mx-node-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --mx-node-shadow-selected: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+  /* Accents (same in both themes) */
+  --mx-accent: #7c3aed;
+  --mx-accent-glow: rgba(124, 58, 237, 0.15);
+  --mx-terminal: #7c3aed;
+  --mx-note: #f59e0b;
+  --mx-vscode: #06b6d4;
+  --mx-obsidian: #a855f7;
+  --mx-browser: #f43f5e;
+
+  /* Status */
+  --mx-success: #10b981;
+  --mx-warning: #f59e0b;
+  --mx-error: #ef4444;
+
+  /* Sidebar */
+  --mx-sidebar-bg: rgba(17, 17, 24, 0.95);
+  --mx-sidebar-hover: rgba(255, 255, 255, 0.04);
+  --mx-sidebar-active: rgba(124, 58, 237, 0.12);
+
+  /* Input */
+  --mx-input-bg: rgba(10, 10, 15, 0.6);
+  --mx-input-border: rgba(255, 255, 255, 0.08);
+  --mx-input-focus: rgba(124, 58, 237, 0.3);
+  --mx-placeholder: #52525b;
+}
+
+/* ===== Light Theme ===== */
+[data-theme="light"] {
+  --mx-bg: #f8fafc;
+  --mx-surface: #ffffff;
+  --mx-surface-alt: #f1f5f9;
+  --mx-border: rgba(0, 0, 0, 0.08);
+  --mx-border-strong: rgba(0, 0, 0, 0.15);
+  --mx-text: #18181b;
+  --mx-text-secondary: #52525b;
+  --mx-text-muted: #a1a1aa;
+
+  /* Glassmorphism */
+  --mx-glass-bg: rgba(255, 255, 255, 0.85);
+  --mx-glass-border: rgba(0, 0, 0, 0.08);
+  --mx-titlebar: rgba(241, 245, 249, 0.9);
+  --mx-node-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  --mx-node-shadow-selected: 0 4px 24px rgba(0, 0, 0, 0.12);
+
+  /* Accents stay vibrant */
+  --mx-accent: #7c3aed;
+  --mx-accent-glow: rgba(124, 58, 237, 0.1);
+  --mx-terminal: #7c3aed;
+  --mx-note: #f59e0b;
+  --mx-vscode: #06b6d4;
+  --mx-obsidian: #a855f7;
+  --mx-browser: #f43f5e;
+
+  /* Status */
+  --mx-success: #10b981;
+  --mx-warning: #f59e0b;
+  --mx-error: #ef4444;
+
+  /* Sidebar */
+  --mx-sidebar-bg: rgba(255, 255, 255, 0.95);
+  --mx-sidebar-hover: rgba(0, 0, 0, 0.04);
+  --mx-sidebar-active: rgba(124, 58, 237, 0.08);
+
+  /* Input */
+  --mx-input-bg: rgba(241, 245, 249, 0.8);
+  --mx-input-border: rgba(0, 0, 0, 0.1);
+  --mx-input-focus: rgba(124, 58, 237, 0.3);
+  --mx-placeholder: #a1a1aa;
+}
+
+/* ===== Base reset ===== */
 html,
 body,
 #root {
@@ -10,43 +106,63 @@ body,
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #0f0f1a;
-  color: #e2e8f0;
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background-color: var(--mx-bg);
+  color: var(--mx-text);
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* React Flow dark theme overrides */
+/* ===== React Flow theme overrides ===== */
 .react-flow__background {
-  background-color: #0f0f1a !important;
+  background-color: var(--mx-bg) !important;
 }
 
 .react-flow__controls button {
-  background-color: #1a1a2e !important;
-  color: #e2e8f0 !important;
-  border-color: #2a2a4a !important;
+  background-color: var(--mx-surface) !important;
+  color: var(--mx-text) !important;
+  border-color: var(--mx-border) !important;
 }
 
 .react-flow__controls button:hover {
-  background-color: #2a2a4a !important;
+  background-color: var(--mx-surface-alt) !important;
 }
 
 .react-flow__controls button svg {
-  fill: #e2e8f0 !important;
+  fill: var(--mx-text) !important;
 }
 
 .react-flow__minimap {
-  background-color: #1a1a2e !important;
-  border: 1px solid #2a2a4a !important;
+  background-color: var(--mx-surface) !important;
+  border: 1px solid var(--mx-border) !important;
   border-radius: 8px !important;
 }
 
-/* Edge (connection line) styling */
 .react-flow__edge-path {
-  stroke: #7c3aed !important;
+  stroke: var(--mx-accent) !important;
   stroke-width: 2 !important;
 }
 
 .react-flow__connection-line {
-  stroke: #7c3aed !important;
+  stroke: var(--mx-accent) !important;
   stroke-dasharray: 5 5 !important;
+}
+
+/* ===== Scrollbar styling ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--mx-border-strong);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--mx-text-muted);
 }

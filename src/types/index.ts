@@ -1,4 +1,4 @@
-// -- Tauri backend types --
+// -- Backend IPC types --
 
 export interface PtyInfo {
   id: string;
@@ -65,6 +65,48 @@ export interface GroupNodeData {
   [key: string]: unknown;
 }
 
+export interface BrowserNodeData {
+  type: "browser";
+  label: string;
+  url: string;
+  [key: string]: unknown;
+}
+
+export interface KanbanCard {
+  id: string;
+  title: string;
+}
+
+export interface KanbanColumn {
+  id: string;
+  title: string;
+  cards: KanbanCard[];
+}
+
+export interface KanbanNodeData {
+  type: "kanban";
+  label: string;
+  columns: KanbanColumn[];
+  [key: string]: unknown;
+}
+
+export interface ApiNodeData {
+  type: "api";
+  label: string;
+  method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+  url: string;
+  body: string;
+  headers: { key: string; value: string }[];
+  [key: string]: unknown;
+}
+
+export interface DbNodeData {
+  type: "db";
+  label: string;
+  query: string;
+  [key: string]: unknown;
+}
+
 export const GROUP_COLORS = [
   "#ef4444", "#f97316", "#f59e0b", "#22c55e", "#14b8a6",
   "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899", "#64748b",
@@ -75,7 +117,11 @@ export type CanvasNodeData =
   | NoteNodeData
   | VSCodeNodeData
   | ObsidianNodeData
-  | GroupNodeData;
+  | GroupNodeData
+  | BrowserNodeData
+  | KanbanNodeData
+  | ApiNodeData
+  | DbNodeData;
 
 // -- Vault types --
 
@@ -142,6 +188,26 @@ export interface TranslateResult {
   command: string;
   provider: string;
   model: string;
+}
+
+// -- Proxy types --
+
+export interface ProxyStatus {
+  instance_id: string;
+  proxy_port: number;
+  target_port: number;
+  running: boolean;
+}
+
+// -- System monitoring types --
+
+export interface SystemMetrics {
+  cpu_usage: number;
+  memory_used: number;
+  memory_total: number;
+  memory_percent: number;
+  active_ptys: number;
+  active_code_servers: number;
 }
 
 // -- Sync response from backend --

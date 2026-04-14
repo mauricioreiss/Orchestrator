@@ -1,1 +1,0 @@
-{"default":{"identifier":"default","description":"Default capabilities for Maestri-X","local":true,"windows":["main"],"permissions":["core:default","core:event:default","core:window:default","core:window:allow-set-title","dialog:default"]}}

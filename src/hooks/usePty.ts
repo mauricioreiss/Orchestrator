@@ -1,9 +1,7 @@
 import { useState, useEffect, useRef, type RefObject } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { isTauri } from "../lib/tauri";
+import { invoke, listen, isElectron } from "../lib/electron";
 import type { PtyInfo } from "../types";
 
 interface UsePtyOptions {
@@ -56,9 +54,9 @@ export function usePty({
   // Initialize xterm.js + spawn PTY + wire everything
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || disabled || !isTauri()) {
+    if (!container || disabled || !isElectron()) {
       // Reset state when disabled/not native so UI can show placeholder
-      if (disabled || !isTauri()) {
+      if (disabled || !isElectron()) {
         setPtyId(null);
         setConnected(false);
       }
@@ -106,16 +104,16 @@ export function usePty({
         setPtyId(info.id);
         setConnected(true);
 
-        // PTY output → xterm.js
-        unlistenOutput = await listen<number[]>(
+        // PTY output → xterm.js (Electron: sync unlisten, payload direct)
+        unlistenOutput = listen<number[]>(
           `pty-output-${info.id}`,
-          (event) => {
-            term.write(new Uint8Array(event.payload));
+          (payload) => {
+            term.write(new Uint8Array(payload));
           },
         );
 
         // PTY exit → mark disconnected
-        unlistenExit = await listen<string>(
+        unlistenExit = listen<string>(
           `pty-exit-${info.id}`,
           () => {
             setConnected(false);
@@ -124,10 +122,10 @@ export function usePty({
         );
 
         // Context injection → render directly in xterm.js (notes, obsidian, leader briefings)
-        unlistenInjection = await listen<string>(
+        unlistenInjection = listen<string>(
           `context-injection-${info.id}`,
-          (event) => {
-            term.write(event.payload);
+          (payload) => {
+            term.write(payload);
           },
         );
 

@@ -1,7 +1,7 @@
 import { useRef, useEffect, useCallback } from "react";
 import { useReactFlow, useOnViewportChange } from "@xyflow/react";
-import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "../lib/tauri";
+import { invoke } from "../lib/electron";
+import { isElectron } from "../lib/electron";
 import { useCanvasStore } from "../store/canvasStore";
 import type { TerminalNodeData } from "../types";
 
@@ -52,7 +52,7 @@ export function useHibernation() {
         (n) => (n.parentId as string) === groupId,
       );
 
-      if (isTauri()) {
+      if (isElectron()) {
         for (const child of children) {
           if (child.type === "terminal") {
             const ptyId = (child.data as TerminalNodeData)?.ptyId;

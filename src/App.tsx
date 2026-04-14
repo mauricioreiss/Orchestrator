@@ -1,31 +1,28 @@
 import { useState, useEffect, useCallback } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, isElectron } from "./lib/electron";
 import Canvas from "./components/Canvas";
-import WelcomeModal from "./components/WelcomeModal";
+import Sidebar from "./components/Sidebar";
+import BootScreen from "./components/BootScreen";
 import SettingsModal from "./components/SettingsModal";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { useCanvasStore } from "./store/canvasStore";
-import { isTauri } from "./lib/tauri";
 
 export default function App() {
-  const [showWelcome, setShowWelcome] = useState(false);
+  const [showBoot, setShowBoot] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<"checking" | "ok" | "fail">("checking");
   const loaded = useCanvasStore((s) => s.loaded);
   const nodeCount = useCanvasStore((s) => s.nodes.length);
 
-  // IPC handshake: verify the Tauri bridge is alive
   useEffect(() => {
-    const tauriDetected = isTauri();
-    console.log(`[maestri-x] isTauri() = ${tauriDetected}`);
-    console.log(`[maestri-x] __TAURI_INTERNALS__ =`, (window as any).__TAURI_INTERNALS__); // eslint-disable-line @typescript-eslint/no-explicit-any
-
-    if (!tauriDetected) {
-      console.warn("[maestri-x] No Tauri bridge detected — running in browser mode");
+    const electronDetected = isElectron();
+    console.log(`[maestri-x] isElectron() = ${electronDetected}`);
+    if (!electronDetected) {
+      console.warn("[maestri-x] No Electron bridge detected — running in browser mode");
       setBridgeStatus("fail");
       return;
     }
-
     invoke<string>("ping")
       .then((r) => {
         console.log(`[maestri-x] Ping response: ${r} — IPC bridge is working`);
@@ -37,31 +34,33 @@ export default function App() {
       });
   }, []);
 
-  // Show welcome on first launch (empty canvas after load)
   useEffect(() => {
-    if (loaded && nodeCount === 0) {
-      setShowWelcome(true);
-    }
+    if (loaded && nodeCount === 0) setShowBoot(true);
   }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const openSettings = useCallback(() => setShowSettings(true), []);
 
   return (
-    <ReactFlowProvider>
-      <div className="w-full h-full bg-mx-bg">
-        <Canvas onOpenSettings={openSettings} />
-        <WelcomeModal
-          open={showWelcome}
-          onClose={() => setShowWelcome(false)}
+    <ThemeProvider>
+      <ReactFlowProvider>
+        <div className="flex w-full h-full" style={{ background: "var(--mx-bg)" }}>
+          <Sidebar onOpenSettings={openSettings} />
+          <div className="flex-1 h-full min-w-0">
+            <Canvas />
+          </div>
+        </div>
+
+        <BootScreen
+          open={showBoot}
+          onClose={() => setShowBoot(false)}
         />
         <SettingsModal
           open={showSettings}
           onClose={() => setShowSettings(false)}
         />
 
-        {/* IPC bridge status indicator (debug, bottom-left) */}
         {bridgeStatus !== "ok" && (
-          <div className="fixed bottom-4 left-4 z-[9999] px-3 py-2 rounded-lg text-xs font-mono"
+          <div className="fixed bottom-4 left-16 z-[9999] px-3 py-2 rounded-lg text-xs font-mono"
             style={{
               background: bridgeStatus === "checking" ? "rgba(245,158,11,0.15)" : "rgba(239,68,68,0.15)",
               border: `1px solid ${bridgeStatus === "checking" ? "rgba(245,158,11,0.3)" : "rgba(239,68,68,0.3)"}`,
@@ -72,7 +71,7 @@ export default function App() {
               : "Ambiente Web — use a versao Desktop para funcionalidade completa"}
           </div>
         )}
-      </div>
-    </ReactFlowProvider>
+      </ReactFlowProvider>
+    </ThemeProvider>
   );
 }

@@ -10,8 +10,8 @@ import {
   type Connection,
   type Viewport,
 } from "@xyflow/react";
-import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "../lib/tauri";
+import { invoke } from "../lib/electron";
+import { isElectron } from "../lib/electron";
 
 // Canvas ID for persistence (single canvas MVP)
 const CANVAS_ID = "default";
@@ -37,6 +37,15 @@ interface CanvasStore {
 
   // Add node helpers
   addNode: (node: Node) => void;
+  addTerminalNode: () => void;
+  addNoteNode: () => void;
+  addVSCodeNode: () => void;
+  addObsidianNode: () => void;
+  addBrowserNode: () => void;
+  addKanbanNode: () => void;
+  addApiNode: () => void;
+  addDbNode: () => void;
+  addGroupNode: () => void;
 
   // Persistence
   save: () => Promise<void>;
@@ -62,7 +71,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   onNodesChange: (changes) => {
     // Detect node removals and cleanup processes before applying
     const removes = changes.filter((c) => c.type === "remove");
-    if (removes.length > 0 && isTauri()) {
+    if (removes.length > 0 && isElectron()) {
       const currentNodes = get().nodes;
       const payload = removes
         .map((r) => {
@@ -133,8 +142,126 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     scheduleSave(get());
   },
 
+  addTerminalNode: () => {
+    const count = get().nodes.filter((n) => n.type === "terminal").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "terminal",
+      position: { x: 100 + Math.random() * 600, y: 100 + Math.random() * 400 },
+      data: { type: "terminal", label: `Terminal ${count}`, role: "Agent" },
+      style: { width: 520, height: 360 },
+    });
+  },
+
+  addNoteNode: () => {
+    const count = get().nodes.filter((n) => n.type === "note").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "note",
+      position: { x: 50 + Math.random() * 400, y: 50 + Math.random() * 300 },
+      data: { type: "note", label: `Note ${count}`, content: "", priority: 1, commandMode: false },
+      style: { width: 350, height: 250 },
+    });
+  },
+
+  addVSCodeNode: () => {
+    const count = get().nodes.filter((n) => n.type === "vscode").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "vscode",
+      position: { x: 50 + Math.random() * 300, y: 50 + Math.random() * 200 },
+      data: { type: "vscode", label: `VS Code ${count}`, workspacePath: "" },
+      style: { width: 700, height: 500 },
+    });
+  },
+
+  addObsidianNode: () => {
+    const count = get().nodes.filter((n) => n.type === "obsidian").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "obsidian",
+      position: { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      data: { type: "obsidian", label: `Vault ${count}`, vaultPath: "" },
+      style: { width: 380, height: 400 },
+    });
+  },
+
+  addBrowserNode: () => {
+    const count = get().nodes.filter((n) => n.type === "browser").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "browser",
+      position: { x: 60 + Math.random() * 400, y: 60 + Math.random() * 300 },
+      data: { type: "browser", label: `Browser ${count}`, url: "" },
+      style: { width: 800, height: 600 },
+    });
+  },
+
+  addKanbanNode: () => {
+    const count = get().nodes.filter((n) => n.type === "kanban").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "kanban",
+      position: { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      data: {
+        type: "kanban",
+        label: `Kanban ${count}`,
+        columns: [
+          { id: crypto.randomUUID(), title: "To Do", cards: [] },
+          { id: crypto.randomUUID(), title: "Doing", cards: [] },
+          { id: crypto.randomUUID(), title: "Done", cards: [] },
+        ],
+      },
+      style: { width: 600, height: 450 },
+    });
+  },
+
+  addApiNode: () => {
+    const count = get().nodes.filter((n) => n.type === "api").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "api",
+      position: { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      data: {
+        type: "api",
+        label: `API ${count}`,
+        method: "GET",
+        url: "",
+        body: "",
+        headers: [],
+      },
+      style: { width: 450, height: 500 },
+    });
+  },
+
+  addDbNode: () => {
+    const count = get().nodes.filter((n) => n.type === "db").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "db",
+      position: { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      data: {
+        type: "db",
+        label: `Database ${count}`,
+        query: "SELECT * FROM users LIMIT 10;",
+      },
+      style: { width: 550, height: 400 },
+    });
+  },
+
+  addGroupNode: () => {
+    const count = get().nodes.filter((n) => n.type === "group").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "group",
+      position: { x: 50 + Math.random() * 200, y: 50 + Math.random() * 200 },
+      data: { type: "group", label: `Project ${count}`, color: "#3b82f6" },
+      style: { width: 1200, height: 800, zIndex: -1 },
+    });
+  },
+
   save: async () => {
-    if (!isTauri()) return;
+    if (!isElectron()) return;
     const { nodes, edges, viewport } = get();
     const data = JSON.stringify({ nodes, edges, viewport });
     try {
@@ -149,7 +276,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
 
   load: async () => {
-    if (!isTauri()) {
+    if (!isElectron()) {
       set({ loaded: true });
       return;
     }

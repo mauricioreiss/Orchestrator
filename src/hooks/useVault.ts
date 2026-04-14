@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "../lib/tauri";
+import { invoke } from "../lib/electron";
+import { isElectron } from "../lib/electron";
 import type { VaultFile, VaultContent, VaultSearchResult } from "../types";
 
 interface UseVaultOptions {
@@ -17,7 +17,7 @@ export function useVault({ vaultPath }: UseVaultOptions) {
 
   const loadFiles = useCallback(
     async (subfolder?: string) => {
-      if (!vaultPath || !isTauri()) return;
+      if (!vaultPath || !isElectron()) return;
       setLoading(true);
       setError(null);
       try {
@@ -38,7 +38,7 @@ export function useVault({ vaultPath }: UseVaultOptions) {
 
   const readFile = useCallback(
     async (relativePath: string) => {
-      if (!vaultPath || !isTauri()) return null;
+      if (!vaultPath || !isElectron()) return null;
       setError(null);
       try {
         const result = await invoke<VaultContent>("read_vault_file", {
@@ -57,7 +57,7 @@ export function useVault({ vaultPath }: UseVaultOptions) {
 
   const search = useCallback(
     async (query: string) => {
-      if (!vaultPath || !query || !isTauri()) return;
+      if (!vaultPath || !query || !isElectron()) return;
       setLoading(true);
       setError(null);
       try {
@@ -77,7 +77,7 @@ export function useVault({ vaultPath }: UseVaultOptions) {
 
   const searchContent = useCallback(
     async (query: string, maxResults?: number): Promise<VaultSearchResult[]> => {
-      if (!vaultPath || query.length < 2 || !isTauri()) return [];
+      if (!vaultPath || query.length < 2 || !isElectron()) return [];
       setLoading(true);
       setError(null);
       try {

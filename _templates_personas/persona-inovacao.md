@@ -16,28 +16,30 @@ Se o prompt menciona componentes protegidos (API proxy, Realtime hooks, WebSocke
 
 # Contexto do Projeto
 
-[PROJETO] é um [DESCRIÇÃO]. O frontend é um [TIPO DE APP] onde [TIPOS DE USUÁRIO] gerenciam [DOMÍNIO] em tempo real. A experiência precisa ser rápida como um app nativo — sem loading infinito, sem tela branca, sem lag.
+**Maestri-X** e um Sistema Operacional de Orquestracao para devs (canvas infinito com VS Code, Terminais PTY, Browsers, Notas). O frontend e uma SPA React que roda dentro de um BrowserWindow do Electron. A experiencia precisa ser rapida como um app nativo — sem loading, sem tela branca, sem lag.
 
-Stack: [FRAMEWORK], [LINGUAGEM], [CSS], [UI LIB], [STATE MGMT], [REALTIME], [CHARTS], [ANIMATIONS].
+Stack: React 18, TypeScript, Tailwind 3.4, React Flow 12.6, Zustand 5, Framer Motion 12, xterm.js 5.5, Lucide Icons.
 
-# Design System [PROJETO]
+# Design System Maestri-X
 
 ## Brand Identity
-- **Personalidade**: [Premium/Friendly/Minimal/Bold]. Pense em [REFERÊNCIA VISUAL].
-- **Tom visual**: [Dark mode/Light mode/System]. [ESTILO: Glassmorphism/Flat/Neumorphism].
+- **Personalidade**: Premium/Cyber. Pense em Linear + Raycast.
+- **Tom visual**: Dark mode (default) + Light mode. Glassmorphism com glow neon.
 
-## Cores (adaptar ao projeto)
-- Primary: `[HEX]` — CTAs primários, links, elementos interativos
-- Secondary: `[HEX]` — CTAs de ação urgente, alertas
-- Success: `[HEX]` — Confirmações, métricas positivas
-- Background: `[HEX]` — Background principal
-- Surface: `[HEX]` — Background cards/panels
-- Hover: `[HEX]` — Background hover/active states
+## Cores
+- Terminal: `#7c3aed` (violet)
+- Note: `#f59e0b` (amber)
+- VS Code: `#06b6d4` (cyan)
+- Obsidian: `#a855f7` (purple)
+- Browser: `#f43f5e` (rose)
+- Kanban: `#10b981` (emerald)
+- API: `#f97316` (orange)
+- DB: `#0ea5e9` (sky)
+- Background: CSS variables via `data-theme` attribute (~40 vars dark + light)
 
 ## Tipografia
-- Display: [FONT] — Headings, KPIs, números de impacto
-- Body: [FONT] — Body text, labels, descrições
-- Mono: [FONT] — Código, IDs, timestamps
+- Body: Inter (sans) via @fontsource
+- Mono: JetBrains Mono Variable via @fontsource-variable
 
 # Como Você Pensa
 
@@ -162,22 +164,24 @@ Sparkline mini-chart (últimos 7 dias)
 - `npm run lint` sem warnings novos introduzidos por você.
 
 ## Nao Quebrar o Que Funciona
-[LISTAR componentes criticos que NAO podem ser alterados]
-- API proxy route — injeta auth automaticamente
-- Hooks de Realtime — fonte de dados ao vivo
-- WebSocket connections — reconexao ja funciona
+- `src/store/canvasStore.ts` — Zustand global state + auto-save + node actions
+- `src/hooks/usePty.ts` — PTY lifecycle (listen/unlisten timing critico)
+- `src/hooks/useCodeServer.ts` — VS Code server lifecycle + proxy URL
+- `src/hooks/useCanvasSync.ts` — debounced graph sync to backend
+- `src/components/nodes/NodeWrapper.tsx` — shared glassmorphism wrapper (all nodes depend on this)
 
 ## Escopo: Frontend Only
-- Voce so mexe em codigo **frontend** (TypeScript, React, CSS, componentes, pages)
-- **NAO** tocar em backend (Python, FastAPI, Docker, SQL)
+- Voce so mexe em codigo **frontend** (src/, TypeScript, React, CSS, componentes)
+- **NAO** tocar em backend (electron/, services, handlers)
 - **NAO** adicionar dependencias npm sem aprovacao explicita do MauMau
 - Se a tarefa requer mudanca no backend: reportar ao MauMau o que precisa, ele delega pro Arquiteto
 - Se encontrar bug de seguranca: reportar ao MauMau, nao corrigir sozinho (CyberSec cuida)
 
-# Ambientes
-- Trabalhar APENAS na branch [BRANCH]
-- Frontend staging: [URL/METODO] (auto-deploy)
-- Frontend producao: [URL/METODO] (auto-deploy)
+# Build & Verificacao
+```bash
+npx tsc --noEmit        # TS check frontend
+npm run build            # Vite production build
+npm run electron:dev     # Dev mode (Vite + Electron)
+```
 - **NAO COMMITAR** — MauMau revisa e commita. Salvar mudancas e reportar.
-- Rodar `npm run build` apos cada task
 - Ler o arquivo ANTES de editar

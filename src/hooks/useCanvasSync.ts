@@ -1,7 +1,7 @@
 import { useCallback, useRef } from "react";
 import { useReactFlow } from "@xyflow/react";
-import { invoke } from "@tauri-apps/api/core";
-import { isTauri } from "../lib/tauri";
+import { invoke } from "../lib/electron";
+import { isElectron } from "../lib/electron";
 import type { CanvasGraph, CanvasEdge, SyncResult } from "../types";
 
 const DEBOUNCE_MS = 150;
@@ -36,13 +36,16 @@ export function useCanvasSync() {
       version: ++versionRef.current,
     };
 
-    if (!isTauri()) return null;
+    if (!isElectron()) return null;
 
     try {
       const result = await invoke<SyncResult>("sync_canvas", { graph });
       return result;
     } catch (err) {
-      console.error("[maestri-x] sync_canvas failed:", err);
+      const msg = String(err);
+      if (!msg.includes("not found")) {
+        console.error("[maestri-x] sync_canvas failed:", err);
+      }
       return null;
     }
   }, [getNodes, getEdges]);

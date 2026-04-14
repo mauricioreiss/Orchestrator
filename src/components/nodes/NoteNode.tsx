@@ -1,19 +1,21 @@
 import { memo, useState, useCallback, useRef, useEffect } from "react";
 import {
-  Handle,
   Position,
-  NodeResizer,
   useReactFlow,
   useEdges,
   type NodeProps,
 } from "@xyflow/react";
+import { invoke } from "../../lib/electron";
 import type { NoteNodeData, TerminalNodeData } from "../../types";
+import { isElectron } from "../../lib/electron";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
-import { useTranslator, type TranslatorStatus } from "../../hooks/useTranslator";
 import { useCanvasStore } from "../../store/canvasStore";
+import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#f59e0b";
 const CONTENT_DEBOUNCE_MS = 300;
+
+type ExecStatus = "idle" | "sending" | "success" | "error";
 
 function NoteNode({ id, data, selected }: NodeProps) {
   const nodeData = data as NoteNodeData;
@@ -22,10 +24,11 @@ function NoteNode({ id, data, selected }: NodeProps) {
   const commandMode = nodeData.commandMode ?? false;
 
   const [content, setContent] = useState(nodeData.content ?? "");
+  const [execStatus, setExecStatus] = useState<ExecStatus>("idle");
+  const [execError, setExecError] = useState<string | null>(null);
   const { setNodes, getNode } = useReactFlow();
   const edges = useEdges();
   const { syncDebounced } = useCanvasSync();
-  const { status, lastCommand, error, translate } = useTranslator();
   const setEdges = useCanvasStore((s) => s.setEdges);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -65,7 +68,6 @@ function NoteNode({ id, data, selected }: NodeProps) {
     syncDebounced();
   }, [id, commandMode, setNodes, syncDebounced]);
 
-  // Update edge status for visual feedback
   const setEdgeStatus = useCallback(
     (edgeStatus: string) => {
       setEdges((eds) =>
@@ -79,163 +81,128 @@ function NoteNode({ id, data, selected }: NodeProps) {
     [id, setEdges],
   );
 
-  // Find the connected terminal and execute translation
   const handleExecute = useCallback(async () => {
+    if (!isElectron()) return;
     const noteEdge = edges.find((e) => e.source === id);
     if (!noteEdge) return;
-
     const targetNode = getNode(noteEdge.target);
     if (!targetNode || targetNode.type !== "terminal") return;
-
     const termData = targetNode.data as TerminalNodeData;
     if (!termData.ptyId) return;
 
-    // Set edge to "translating" state
+    setExecStatus("sending");
+    setExecError(null);
     setEdgeStatus("translating");
 
-    const result = await translate(
-      content,
-      termData.ptyId,
-      termData.cwd ?? ".",
-      termData.role ?? "Agent",
-    );
+    try {
+      const encoder = new TextEncoder();
+      const normalized = content.trim().replace(/\r?\n/g, "\r\n") + "\r\n";
+      const payload = Array.from(encoder.encode(normalized));
+      await invoke("write_pty", { id: termData.ptyId, data: payload });
+      setExecStatus("success");
+      setEdgeStatus("success");
+    } catch (e) {
+      setExecStatus("error");
+      setExecError(String(e));
+      setEdgeStatus("error");
+    }
+    setTimeout(() => {
+      setExecStatus("idle");
+      setEdgeStatus("idle");
+    }, 2000);
+  }, [id, edges, getNode, content, setEdgeStatus]);
 
-    // Update edge status based on result
-    setEdgeStatus(result ? "success" : "error");
-    // Reset edge after 3s
-    setTimeout(() => setEdgeStatus("idle"), 3000);
-  }, [id, edges, getNode, content, translate, setEdgeStatus]);
-
-  const statusIcon = getStatusIcon(status);
   const borderColor = commandMode ? "#7c3aed" : BORDER_COLOR;
 
+  const modeBadge = (
+    <button
+      onClick={toggleCommandMode}
+      className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border transition-colors nodrag ${
+        commandMode
+          ? "bg-violet-500/30 text-violet-300 border-violet-500/50"
+          : "bg-amber-500/20 text-amber-400 border-amber-500/30"
+      }`}
+      title={commandMode ? "Command mode (send directly)" : "Text mode (context note)"}
+    >
+      {commandMode ? "CMD" : "TXT"}
+    </button>
+  );
+
+  const priorityBadge = (
+    <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/30">
+      P{priority}
+    </span>
+  );
+
   return (
-    <>
-      <NodeResizer
-        isVisible={selected}
-        minWidth={300}
-        minHeight={200}
-        lineStyle={{ borderColor }}
-        handleStyle={{
-          width: 10,
-          height: 10,
-          backgroundColor: borderColor,
-          borderColor,
-        }}
+    <NodeWrapper
+      id={id}
+      selected={selected}
+      borderColor={borderColor}
+      minWidth={300}
+      minHeight={200}
+      label={label}
+      badges={<>{modeBadge}{priorityBadge}</>}
+      statusLeft={`${content.length} chars`}
+      statusRight={
+        <span style={{ color: commandMode ? "#a78bfa" : "#fbbf24", opacity: 0.6 }}>
+          {commandMode ? "command" : "note"}
+        </span>
+      }
+      handles={[{ type: "source", position: Position.Right, color: commandMode ? "#7c3aed" : "#f59e0b" }]}
+    >
+      {/* Content area */}
+      <textarea
+        className="flex-1 min-h-0 w-full bg-transparent text-sm p-3 resize-none outline-none nodrag nowheel"
+        style={{ color: "var(--mx-text)" }}
+        value={content}
+        onChange={handleChange}
+        placeholder={
+          commandMode
+            ? "Type a command to execute in the terminal..."
+            : "System instruction for connected terminals..."
+        }
+        spellCheck={false}
       />
 
-      <div
-        className="flex flex-col h-full rounded-lg overflow-hidden shadow-2xl"
-        style={{
-          border: `1px solid ${selected ? borderColor : "rgba(49,50,68,0.5)"}`,
-          background: "rgba(24,24,37,0.85)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          boxShadow: selected
-            ? `0 0 20px ${borderColor}33, 0 8px 32px rgba(0,0,0,0.3)`
-            : "0 8px 32px rgba(0,0,0,0.2)",
-        }}
-      >
-        {/* Title bar */}
-        <div className="flex items-center justify-between px-3 py-1.5 bg-[#11111b]/80 border-b border-[#313244]/50 select-none cursor-grab active:cursor-grabbing">
-          <span className="text-sm font-medium text-[#cdd6f4] truncate max-w-[140px]">
-            {label}
-          </span>
-          <div className="flex items-center gap-2">
-            {/* Command mode toggle */}
-            <button
-              onClick={toggleCommandMode}
-              className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border transition-colors nodrag ${
-                commandMode
-                  ? "bg-violet-500/30 text-violet-300 border-violet-500/50"
-                  : "bg-amber-500/20 text-amber-400 border-amber-500/30"
-              }`}
-              title={commandMode ? "Command mode (AI translates)" : "Text mode (inject as-is)"}
-            >
-              {commandMode ? "CMD" : "TXT"}
-            </button>
-            <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-amber-500/20 text-amber-400 border-amber-500/30">
-              P{priority}
-            </span>
-          </div>
-        </div>
-
-        {/* Content area */}
-        <textarea
-          className="flex-1 min-h-0 w-full bg-transparent text-[#cdd6f4] text-sm p-3 resize-none outline-none placeholder-[#6c7086] nodrag nowheel"
-          value={content}
-          onChange={handleChange}
-          placeholder={
-            commandMode
-              ? "Describe what you want the terminal to do..."
-              : "System instruction for connected terminals..."
-          }
-          spellCheck={false}
-        />
-
-        {/* Execute button (command mode only) */}
-        {commandMode && (
-          <div className="px-3 py-2 border-t border-[#313244]/50">
-            <button
-              onClick={handleExecute}
-              disabled={status === "translating" || !content.trim()}
-              className={`w-full py-1.5 rounded text-sm font-semibold transition-all nodrag ${
-                status === "translating"
-                  ? "bg-violet-500/20 text-violet-300 cursor-wait"
-                  : status === "error"
-                    ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                    : status === "success"
-                      ? "bg-emerald-500/20 text-emerald-400"
-                      : "bg-violet-500/30 text-violet-300 hover:bg-violet-500/40 active:bg-violet-500/50"
-              }`}
-            >
-              {statusIcon}
-            </button>
-            {/* Last translated command or error */}
-            {lastCommand && status === "success" && (
-              <div className="mt-1.5 px-2 py-1 rounded bg-[#11111b]/60 text-[10px] text-emerald-400 font-mono truncate">
-                {lastCommand}
-              </div>
-            )}
-            {error && status === "error" && (
-              <div className="mt-1.5 px-2 py-1 rounded bg-[#11111b]/60 text-[10px] text-red-400 truncate">
-                {error}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Status bar */}
-        <div className="flex items-center justify-between px-3 py-1 bg-[#11111b]/80 border-t border-[#313244]/50 select-none">
-          <span className="text-[10px] text-[#6c7086]">
-            {content.length} chars
-          </span>
-          <span
-            className={`text-[10px] ${commandMode ? "text-violet-400/60" : "text-amber-400/60"}`}
+      {/* Execute button (command mode only) */}
+      {commandMode && (
+        <div className="px-3 py-2" style={{ borderTop: "1px solid var(--mx-border)" }}>
+          <button
+            onClick={handleExecute}
+            disabled={execStatus === "sending" || !content.trim()}
+            className={`w-full py-1.5 rounded text-sm font-semibold transition-all nodrag ${
+              execStatus === "sending"
+                ? "bg-violet-500/20 text-violet-300 cursor-wait"
+                : execStatus === "error"
+                  ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+                  : execStatus === "success"
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "bg-violet-500/30 text-violet-300 hover:bg-violet-500/40 active:bg-violet-500/50"
+            }`}
           >
-            {commandMode ? "command" : "note"}
-          </span>
+            {getStatusLabel(execStatus)}
+          </button>
+          {execError && execStatus === "error" && (
+            <div
+              className="mt-1.5 px-2 py-1 rounded text-[10px] text-red-400 truncate"
+              style={{ background: "var(--mx-input-bg)" }}
+            >
+              {execError}
+            </div>
+          )}
         </div>
-      </div>
-
-      {/* Source handle: connects TO terminals */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        className={`!w-3 !h-3 !border-2 !border-[#181825] ${
-          commandMode ? "!bg-violet-500" : "!bg-amber-500"
-        }`}
-      />
-    </>
+      )}
+    </NodeWrapper>
   );
 }
 
-function getStatusIcon(status: TranslatorStatus): string {
+function getStatusLabel(status: ExecStatus): string {
   switch (status) {
-    case "translating":
-      return "Translating...";
+    case "sending":
+      return "Sending...";
     case "success":
-      return "Executed";
+      return "Sent";
     case "error":
       return "Error - Retry";
     default:
