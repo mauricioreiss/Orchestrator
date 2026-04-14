@@ -86,7 +86,7 @@ function BrowserNode({ id, data, selected, parentId }: NodeProps) {
           const ps = await invoke<ProxyStatus>("start_proxy", { instanceId: id, targetPort: localhostPort });
           setProxyPort(ps.proxy_port);
           const parsed = new URL(normalizedUrl);
-          const proxyBase = `http://127.0.0.1:${ps.proxy_port}/proxy/${id}`;
+          const proxyBase = `http://127.0.0.1:${ps.proxy_port}`;
           const pathAndQuery = parsed.pathname + parsed.search + parsed.hash;
           setActiveUrl(`${proxyBase}${pathAndQuery}`);
         } catch (e) {

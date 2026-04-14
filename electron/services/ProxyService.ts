@@ -1,10 +1,8 @@
-import express from "express";
 import http from "http";
 import net from "net";
 import { createProxyMiddleware } from "http-proxy-middleware";
 import type { ProxyStatus } from "../types";
 
-const PROXY_PORT = 13333;
 const STRIPPED_HEADERS = [
   "x-frame-options",
   "content-security-policy",
@@ -12,104 +10,87 @@ const STRIPPED_HEADERS = [
   "content-security-policy-report-only",
 ];
 
+interface DedicatedProxy {
+  server: http.Server;
+  port: number;
+  targetPort: number;
+}
+
+/**
+ * Creates a dedicated micro-proxy server per instance.
+ * Each proxy gets its own port (OS-assigned) and forwards ALL traffic
+ * to the target localhost port without path rewriting.
+ * This fixes VS Code serve-web which uses absolute paths for assets.
+ */
 export class ProxyService {
-  private app: express.Express;
-  private server: http.Server;
-  private localTargets = new Map<string, number>();
+  private proxies = new Map<string, DedicatedProxy>();
 
-  constructor() {
-    this.app = express();
+  async startProxy(instanceId: string, targetPort: number): Promise<ProxyStatus> {
+    // Stop existing proxy for this instance if any
+    this.stopProxy(instanceId);
 
-    // Localhost proxy route: /proxy/:instanceId/...
-    this.app.use("/proxy/:instanceId", (req, res, next) => {
-      const { instanceId } = req.params;
-      const targetPort = this.localTargets.get(instanceId);
+    const target = `http://127.0.0.1:${targetPort}`;
 
-      if (targetPort == null) {
-        res.status(404).json({ error: `No proxy registered for instance ${instanceId}` });
-        return;
-      }
-
-      const middleware = createProxyMiddleware({
-        target: `http://127.0.0.1:${targetPort}`,
-        changeOrigin: true,
-        ws: true,
-        pathRewrite: (_path, req) => {
-          const prefix = `/proxy/${instanceId}`;
-          const original = (req as any).originalUrl ?? req.url ?? "";
-          return original.startsWith(prefix) ? original.slice(prefix.length) || "/" : original;
+    const middleware = createProxyMiddleware({
+      target,
+      changeOrigin: true,
+      ws: true,
+      on: {
+        proxyRes: (proxyRes) => {
+          for (const header of STRIPPED_HEADERS) {
+            delete proxyRes.headers[header];
+          }
         },
-        on: {
-          proxyRes: (proxyRes) => {
-            this.stripHeaders(proxyRes);
-          },
-        },
+      },
+    });
+
+    const server = http.createServer((req, res) => {
+      middleware(req, res, () => {
+        res.writeHead(404);
+        res.end();
       });
-
-      middleware(req, res, next);
     });
 
-    this.server = http.createServer(this.app);
-
-    // Handle WebSocket upgrade for registered proxies
-    this.server.on("upgrade", (req, socket, head) => {
-      const url = req.url ?? "";
-
-      const localMatch = url.match(/^\/proxy\/([^/]+)/);
-      if (localMatch) {
-        const instanceId = localMatch[1];
-        const targetPort = this.localTargets.get(instanceId);
-        if (targetPort == null) {
-          socket.destroy();
-          return;
-        }
-
-        const prefix = `/proxy/${instanceId}`;
-        req.url = url.startsWith(prefix) ? url.slice(prefix.length) || "/" : url;
-
-        const wsProxy = createProxyMiddleware({
-          target: `http://127.0.0.1:${targetPort}`,
-          changeOrigin: true,
-          ws: true,
-        });
-
-        wsProxy.upgrade!(req, socket as net.Socket, head);
-        return;
-      }
-
-      socket.destroy();
+    server.on("upgrade", (req, socket, head) => {
+      middleware.upgrade!(req, socket as net.Socket, head);
     });
 
-    this.server.listen(PROXY_PORT, "127.0.0.1", () => {
-      console.log(`[ProxyService] listening on 127.0.0.1:${PROXY_PORT}`);
+    // Port 0 = OS assigns a free port
+    const proxyPort = await new Promise<number>((resolve, reject) => {
+      server.listen(0, "127.0.0.1", () => {
+        const addr = server.address() as net.AddressInfo;
+        resolve(addr.port);
+      });
+      server.on("error", reject);
     });
-  }
 
-  startProxy(instanceId: string, targetPort: number): ProxyStatus {
-    this.localTargets.set(instanceId, targetPort);
-    console.log(`[ProxyService] registered local proxy ${instanceId} -> 127.0.0.1:${targetPort}`);
+    this.proxies.set(instanceId, { server, port: proxyPort, targetPort });
+    console.log(`[ProxyService] micro-proxy ${instanceId} :${proxyPort} -> :${targetPort}`);
 
     return {
       instance_id: instanceId,
-      proxy_port: PROXY_PORT,
+      proxy_port: proxyPort,
       target_port: targetPort,
       running: true,
     };
   }
 
   stopProxy(instanceId: string): void {
-    if (this.localTargets.delete(instanceId)) {
-      console.log(`[ProxyService] unregistered proxy ${instanceId}`);
-    }
+    const proxy = this.proxies.get(instanceId);
+    if (!proxy) return;
+
+    proxy.server.close();
+    this.proxies.delete(instanceId);
+    console.log(`[ProxyService] stopped micro-proxy ${instanceId}`);
   }
 
   list(): ProxyStatus[] {
     const result: ProxyStatus[] = [];
-    for (const [id, port] of this.localTargets) {
+    for (const [id, proxy] of this.proxies) {
       result.push({
         instance_id: id,
-        proxy_port: PROXY_PORT,
-        target_port: port,
+        proxy_port: proxy.port,
+        target_port: proxy.targetPort,
         running: true,
       });
     }
@@ -117,18 +98,14 @@ export class ProxyService {
   }
 
   stopAll(): void {
-    this.localTargets.clear();
-    this.server.close();
-    console.log("[ProxyService] stopped all proxies and closed server");
+    for (const [, proxy] of this.proxies) {
+      proxy.server.close();
+    }
+    this.proxies.clear();
+    console.log("[ProxyService] stopped all micro-proxies");
   }
 
   count(): number {
-    return this.localTargets.size;
-  }
-
-  private stripHeaders(proxyRes: http.IncomingMessage): void {
-    for (const header of STRIPPED_HEADERS) {
-      delete proxyRes.headers[header];
-    }
+    return this.proxies.size;
   }
 }

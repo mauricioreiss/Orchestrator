@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "../lib/electron";
 import { isElectron } from "../lib/electron";
-import type { CodeServerDetection, CodeServerStatus, ProxyStatus } from "../types";
+import type { CodeServerDetection, CodeServerStatus } from "../types";
 
 interface UseCodeServerOptions {
   instanceId: string;
@@ -11,8 +11,6 @@ interface UseCodeServerOptions {
 interface UseCodeServerReturn {
   detection: CodeServerDetection | null;
   status: CodeServerStatus | null;
-  proxyPort: number | null;
-  proxyUrl: string | null;
   starting: boolean;
   error: string | null;
   start: (workspace?: string, binaryPath?: string) => Promise<void>;
@@ -27,15 +25,11 @@ export function useCodeServer({
 }: UseCodeServerOptions): UseCodeServerReturn {
   const [detection, setDetection] = useState<CodeServerDetection | null>(null);
   const [status, setStatus] = useState<CodeServerStatus | null>(null);
-  const [proxyPort, setProxyPort] = useState<number | null>(null);
-  const [proxyUrl, setProxyUrl] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const instanceIdRef = useRef(instanceId);
   instanceIdRef.current = instanceId;
-  const proxyPortRef = useRef<number | null>(null);
-  proxyPortRef.current = proxyPort;
 
   // Detect code-server binary on mount
   useEffect(() => {
@@ -57,19 +51,7 @@ export function useCodeServer({
         setStatus(s);
 
         if (s.running && s.ready) {
-          // Server is up and accepting connections — start proxy if not already running
           setStarting(false);
-          if (!proxyPortRef.current) {
-            invoke<ProxyStatus>("start_proxy", {
-              instanceId: instanceIdRef.current,
-              targetPort: s.port,
-            })
-              .then((ps) => {
-                setProxyPort(ps.proxy_port);
-                setProxyUrl(`http://127.0.0.1:${ps.proxy_port}/proxy/${instanceIdRef.current}`);
-              })
-              .catch((e) => console.error("[maestri-x] start_proxy failed:", e));
-          }
         } else if (!s.running) {
           deadCount++;
           if (deadCount >= 2) {
@@ -123,9 +105,6 @@ export function useCodeServer({
   const stop = useCallback(async () => {
     stopPolling();
     try {
-      await invoke("stop_proxy", { instanceId: instanceIdRef.current }).catch(() => {});
-      setProxyPort(null);
-      setProxyUrl(null);
       await invoke("stop_code_server", {
         instanceId: instanceIdRef.current,
       });
@@ -141,11 +120,8 @@ export function useCodeServer({
     if (disabled) {
       stopPolling();
       if (isElectron()) {
-        invoke("stop_proxy", { instanceId: instanceIdRef.current }).catch(() => {});
         invoke("stop_code_server", { instanceId: instanceIdRef.current }).catch(() => {});
       }
-      setProxyPort(null);
-      setProxyUrl(null);
       setStatus(null);
       setStarting(false);
     }
@@ -156,7 +132,6 @@ export function useCodeServer({
     return () => {
       stopPolling();
       if (isElectron()) {
-        invoke("stop_proxy", { instanceId: instanceIdRef.current }).catch(() => {});
         invoke("stop_code_server", {
           instanceId: instanceIdRef.current,
         }).catch(() => {});
@@ -164,5 +139,5 @@ export function useCodeServer({
     };
   }, [stopPolling]);
 
-  return { detection, status, proxyPort, proxyUrl, starting, error, start, stop };
+  return { detection, status, starting, error, start, stop };
 }

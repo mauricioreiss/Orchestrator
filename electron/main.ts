@@ -11,6 +11,9 @@ import { TranslatorService } from "./services/TranslatorService";
 import { MonitorService } from "./services/MonitorService";
 import { registerIpcHandlers } from "./ipc/handlers";
 
+// Force English locale so VS Code Web doesn't try to load missing pt-BR NLS bundles
+app.commandLine.appendSwitch("lang", "en-US");
+
 let mainWindow: BrowserWindow | null = null;
 
 // Service singletons

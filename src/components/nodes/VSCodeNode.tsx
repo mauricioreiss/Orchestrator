@@ -26,7 +26,7 @@ function VSCodeNode({ id, data, selected, parentId }: NodeProps) {
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
 
-  const { detection, status, proxyPort, proxyUrl, starting, error, start, stop } = useCodeServer({
+  const { detection, status, starting, error, start, stop } = useCodeServer({
     instanceId: id,
     disabled: isHibernated,
   });
@@ -75,10 +75,11 @@ function VSCodeNode({ id, data, selected, parentId }: NodeProps) {
 
   const buildIframeUrl = useCallback(() => {
     if (!status) return "";
-    const baseUrl = proxyUrl ?? status.url;
-    const ws = path || status.workspace;
-    return ws ? `${baseUrl}/?folder=${encodeURIComponent(ws)}` : `${baseUrl}/`;
-  }, [status, path, proxyUrl]);
+    const baseUrl = `http://127.0.0.1:${status.port}`;
+    const ws = (path || status.workspace || "").replace(/\\/g, "/");
+    const locale = "locale=en&hl=en";
+    return ws ? `${baseUrl}/?folder=${encodeURIComponent(ws)}&${locale}` : `${baseUrl}/?${locale}`;
+  }, [status, path]);
 
   const handleIframeError = useCallback(() => {
     retryRef.current = setTimeout(() => setIframeKey((k) => k + 1), 2000);
@@ -178,14 +179,14 @@ function VSCodeNode({ id, data, selected, parentId }: NodeProps) {
       statusLeft={
         <span className="truncate max-w-[300px]" title={path || status?.workspace || ""}>
           {isLive
-            ? `${proxyPort ? `proxy :${proxyPort}` : status!.url} | ${path || status!.workspace || "no folder"}`
+            ? `127.0.0.1:${status!.port} | ${path || status!.workspace || "no folder"}`
             : path || "no folder selected"}
         </span>
       }
       statusRight={
         <span style={{ color: "rgba(6,182,212,0.6)" }}>
           {isLive
-            ? `port ${status!.port}${proxyPort ? ` → ${proxyPort}` : ""}`
+            ? `port ${status!.port}`
             : detection?.source ? `via ${detection.source}` : "vscode"}
         </span>
       }
