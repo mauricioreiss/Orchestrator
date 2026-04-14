@@ -26,7 +26,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "icon": ["icons/icon.ico"]
+    "targets": ["msi", "nsis"],
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
   }
 }

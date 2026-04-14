@@ -3,12 +3,14 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { isTauri } from "../lib/tauri";
 import type { PtyInfo } from "../types";
 
 interface UsePtyOptions {
   containerRef: RefObject<HTMLDivElement | null>;
   cwd?: string;
   label?: string;
+  disabled?: boolean;
 }
 
 interface UsePtyReturn {
@@ -44,6 +46,7 @@ export function usePty({
   containerRef,
   cwd,
   label,
+  disabled = false,
 }: UsePtyOptions): UsePtyReturn {
   const [ptyId, setPtyId] = useState<string | null>(null);
   const [connected, setConnected] = useState(false);
@@ -53,7 +56,14 @@ export function usePty({
   // Initialize xterm.js + spawn PTY + wire everything
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || disabled || !isTauri()) {
+      // Reset state when disabled/not native so UI can show placeholder
+      if (disabled || !isTauri()) {
+        setPtyId(null);
+        setConnected(false);
+      }
+      return;
+    }
 
     // Clear container (handles React StrictMode double-mount)
     container.innerHTML = "";
@@ -77,6 +87,7 @@ export function usePty({
     let localPtyId: string | null = null;
     let unlistenOutput: (() => void) | null = null;
     let unlistenExit: (() => void) | null = null;
+    let unlistenInjection: (() => void) | null = null;
 
     const init = async () => {
       try {
@@ -109,6 +120,14 @@ export function usePty({
           () => {
             setConnected(false);
             term.write("\r\n\x1b[90m[Process exited]\x1b[0m\r\n");
+          },
+        );
+
+        // Context injection → render directly in xterm.js (notes, obsidian, leader briefings)
+        unlistenInjection = await listen<string>(
+          `context-injection-${info.id}`,
+          (event) => {
+            term.write(event.payload);
           },
         );
 
@@ -146,11 +165,12 @@ export function usePty({
       }
       unlistenOutput?.();
       unlistenExit?.();
+      unlistenInjection?.();
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [disabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fit = () => fitRef.current?.fit();
 

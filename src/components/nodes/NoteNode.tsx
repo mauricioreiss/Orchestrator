@@ -64,12 +64,17 @@ function NoteNode({ id, data, selected }: NodeProps) {
       <div
         className="flex flex-col h-full rounded-lg overflow-hidden shadow-2xl"
         style={{
-          border: `1px solid ${selected ? BORDER_COLOR : "#313244"}`,
-          background: "#181825",
+          border: `1px solid ${selected ? BORDER_COLOR : "rgba(49,50,68,0.5)"}`,
+          background: "rgba(24,24,37,0.85)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          boxShadow: selected
+            ? `0 0 20px ${BORDER_COLOR}33, 0 8px 32px rgba(0,0,0,0.3)`
+            : "0 8px 32px rgba(0,0,0,0.2)",
         }}
       >
         {/* Title bar */}
-        <div className="flex items-center justify-between px-3 py-1.5 bg-[#11111b] border-b border-[#313244] select-none cursor-grab active:cursor-grabbing">
+        <div className="flex items-center justify-between px-3 py-1.5 bg-[#11111b]/80 border-b border-[#313244]/50 select-none cursor-grab active:cursor-grabbing">
           <span className="text-sm font-medium text-[#cdd6f4] truncate max-w-[200px]">
             {label}
           </span>
@@ -90,7 +95,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
         />
 
         {/* Status bar */}
-        <div className="flex items-center justify-between px-3 py-1 bg-[#11111b] border-t border-[#313244] select-none">
+        <div className="flex items-center justify-between px-3 py-1 bg-[#11111b]/80 border-t border-[#313244]/50 select-none">
           <span className="text-[10px] text-[#6c7086]">
             {content.length} chars
           </span>

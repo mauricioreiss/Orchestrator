@@ -1,6 +1,7 @@
 import { useCallback, useRef } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { invoke } from "@tauri-apps/api/core";
+import { isTauri } from "../lib/tauri";
 import type { CanvasGraph, CanvasEdge, SyncResult } from "../types";
 
 const DEBOUNCE_MS = 150;
@@ -19,6 +20,7 @@ export function useCanvasSync() {
         id: n.id,
         type: n.type ?? "terminal",
         data: n.data as CanvasGraph["nodes"][number]["data"],
+        parentId: (n.parentId as string) ?? null,
       })),
       edges: edges.map((e) => {
         const sourceNode = nodes.find((n) => n.id === e.source);
@@ -33,6 +35,8 @@ export function useCanvasSync() {
       }),
       version: ++versionRef.current,
     };
+
+    if (!isTauri()) return null;
 
     try {
       const result = await invoke<SyncResult>("sync_canvas", { graph });
