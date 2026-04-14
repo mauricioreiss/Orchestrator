@@ -39,6 +39,15 @@ impl PersistenceManager {
         )
         .map_err(|e| format!("migration failed: {e}"))?;
 
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| format!("settings migration failed: {e}"))?;
+
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -112,6 +121,51 @@ impl PersistenceManager {
         conn.execute("DELETE FROM canvases WHERE id = ?1", rusqlite::params![id])
             .map_err(|e| format!("delete failed: {e}"))?;
         Ok(())
+    }
+
+    /// Get a setting value by key.
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT value FROM settings WHERE key = ?1")
+            .map_err(|e| format!("prepare failed: {e}"))?;
+
+        let result = stmt
+            .query_row(rusqlite::params![key], |row| row.get(0))
+            .optional()
+            .map_err(|e| format!("get_setting failed: {e}"))?;
+
+        Ok(result)
+    }
+
+    /// Set a setting value (upsert).
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), String> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            rusqlite::params![key, value],
+        )
+        .map_err(|e| format!("set_setting failed: {e}"))?;
+        Ok(())
+    }
+
+    /// Get all settings as key-value pairs.
+    pub fn get_all_settings(&self) -> Result<Vec<(String, String)>, String> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn
+            .prepare("SELECT key, value FROM settings ORDER BY key")
+            .map_err(|e| format!("prepare failed: {e}"))?;
+
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| format!("get_all_settings failed: {e}"))?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| format!("row read failed: {e}"))?);
+        }
+        Ok(result)
     }
 }
 

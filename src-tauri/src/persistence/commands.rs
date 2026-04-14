@@ -41,3 +41,30 @@ pub fn delete_canvas(
 ) -> Result<(), String> {
     state.delete(&id)
 }
+
+/// Get a setting value by key.
+#[tauri::command]
+pub fn get_setting(
+    state: State<'_, PersistenceManager>,
+    key: String,
+) -> Result<Option<String>, String> {
+    state.get_setting(&key)
+}
+
+/// Set a setting value (upsert).
+#[tauri::command]
+pub fn set_setting(
+    state: State<'_, PersistenceManager>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    state.set_setting(&key, &value)
+}
+
+/// Get all settings as key-value pairs.
+#[tauri::command]
+pub fn get_all_settings(
+    state: State<'_, PersistenceManager>,
+) -> Result<Vec<(String, String)>, String> {
+    state.get_all_settings()
+}

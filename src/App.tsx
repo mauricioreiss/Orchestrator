@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { invoke } from "@tauri-apps/api/core";
 import Canvas from "./components/Canvas";
 import WelcomeModal from "./components/WelcomeModal";
+import SettingsModal from "./components/SettingsModal";
 import { useCanvasStore } from "./store/canvasStore";
 import { isTauri } from "./lib/tauri";
 
 export default function App() {
   const [showWelcome, setShowWelcome] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<"checking" | "ok" | "fail">("checking");
   const loaded = useCanvasStore((s) => s.loaded);
   const nodeCount = useCanvasStore((s) => s.nodes.length);
@@ -42,13 +44,19 @@ export default function App() {
     }
   }, [loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const openSettings = useCallback(() => setShowSettings(true), []);
+
   return (
     <ReactFlowProvider>
       <div className="w-full h-full bg-mx-bg">
-        <Canvas />
+        <Canvas onOpenSettings={openSettings} />
         <WelcomeModal
           open={showWelcome}
           onClose={() => setShowWelcome(false)}
+        />
+        <SettingsModal
+          open={showSettings}
+          onClose={() => setShowSettings(false)}
         />
 
         {/* IPC bridge status indicator (debug, bottom-left) */}

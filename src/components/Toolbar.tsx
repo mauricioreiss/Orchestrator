@@ -4,6 +4,7 @@ interface ToolbarProps {
   onAddVSCode: () => void;
   onAddObsidian: () => void;
   onAddGroup: () => void;
+  onOpenSettings: () => void;
   nodeCount: number;
 }
 
@@ -13,6 +14,7 @@ export default function Toolbar({
   onAddVSCode,
   onAddObsidian,
   onAddGroup,
+  onOpenSettings,
   nodeCount,
 }: ToolbarProps) {
   return (
@@ -139,6 +141,28 @@ export default function Toolbar({
       </button>
 
       <div className="w-px h-5 bg-mx-border/50" />
+
+      <button
+        onClick={onOpenSettings}
+        className="flex items-center gap-2 px-3 py-1.5 bg-[#1e1e2e] hover:bg-[#313244] text-[#a6adc8] text-sm font-medium rounded-lg transition-colors border border-[#313244]/50"
+        title="Translator Settings"
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 14 14"
+          fill="none"
+          className="shrink-0"
+        >
+          <path
+            d="M7 9a2 2 0 100-4 2 2 0 000 4zM12.3 8.5l-1-1.7a.5.5 0 010-.6l1-1.7a.5.5 0 00-.2-.7l-1.5-.9a.5.5 0 00-.6.1l-.8 1.3a.5.5 0 01-.5.2l-1.4-.3a.5.5 0 01-.4-.4L6.6 2a.5.5 0 00-.5-.4h-1.7a.5.5 0 00-.5.4l-.3 1.7a.5.5 0 01-.4.4L1.8 4.4a.5.5 0 01-.5-.2L.5 2.9a.5.5 0 00-.6-.1L-1.6 3.7"
+            stroke="currentColor"
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
 
       <div className="flex items-center gap-1.5">
         <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

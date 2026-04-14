@@ -1,0 +1,68 @@
+import { useState, useCallback } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { isTauri } from "../lib/tauri";
+import type { TranslateResult } from "../types";
+
+export type TranslatorStatus = "idle" | "translating" | "success" | "error";
+
+interface UseTranslatorReturn {
+  status: TranslatorStatus;
+  lastCommand: string | null;
+  error: string | null;
+  translate: (
+    noteContent: string,
+    ptyId: string,
+    cwd: string,
+    role: string,
+  ) => Promise<TranslateResult | null>;
+}
+
+export function useTranslator(): UseTranslatorReturn {
+  const [status, setStatus] = useState<TranslatorStatus>("idle");
+  const [lastCommand, setLastCommand] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const translate = useCallback(
+    async (
+      noteContent: string,
+      ptyId: string,
+      cwd: string,
+      role: string,
+    ): Promise<TranslateResult | null> => {
+      if (!isTauri()) return null;
+      if (!noteContent.trim()) {
+        setError("Note is empty");
+        setStatus("error");
+        return null;
+      }
+
+      setStatus("translating");
+      setError(null);
+      setLastCommand(null);
+
+      try {
+        const result = await invoke<TranslateResult>("translate_and_inject", {
+          noteContent,
+          ptyId,
+          cwd,
+          role,
+        });
+        setLastCommand(result.command);
+        setStatus("success");
+        // Reset to idle after 3s
+        setTimeout(() => setStatus("idle"), 3000);
+        return result;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        setStatus("error");
+        // Reset to idle after 5s
+        setTimeout(() => setStatus("idle"), 5000);
+        return null;
+      }
+    },
+    [],
+  );
+
+  return { status, lastCommand, error, translate };
+}

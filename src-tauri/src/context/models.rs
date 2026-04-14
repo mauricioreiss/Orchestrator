@@ -38,6 +38,8 @@ pub enum NodeData {
         label: String,
         content: String,
         priority: u32,
+        #[serde(rename = "commandMode", default)]
+        command_mode: bool,
     },
     #[serde(rename = "vscode")]
     VSCode {

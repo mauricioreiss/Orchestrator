@@ -28,7 +28,7 @@ import { useCanvasSync } from "../hooks/useCanvasSync";
 import { useHibernation } from "../hooks/useHibernation";
 import { useViewportCulling } from "../hooks/useViewportCulling";
 import { useCanvasStore } from "../store/canvasStore";
-import type { TerminalNodeData, GroupNodeData } from "../types";
+import type { TerminalNodeData, NoteNodeData, GroupNodeData } from "../types";
 
 const NODE_EDGE_COLORS: Record<string, string> = {
   Leader: "#10b981",
@@ -54,7 +54,11 @@ let vscodeCounter = 0;
 let obsidianCounter = 0;
 let groupCounter = 0;
 
-export default function Canvas() {
+interface CanvasProps {
+  onOpenSettings: () => void;
+}
+
+export default function Canvas({ onOpenSettings }: CanvasProps) {
   const {
     nodes,
     edges,
@@ -121,7 +125,10 @@ export default function Canvas() {
     (params) => {
       const sourceNode = getNode(params.source);
       let stroke = "#7c3aed";
-      if (sourceNode?.type === "note") stroke = "#f59e0b";
+      if (sourceNode?.type === "note") {
+        const noteData = sourceNode.data as NoteNodeData;
+        stroke = noteData.commandMode ? "#7c3aed" : "#f59e0b";
+      }
       else if (sourceNode?.type === "vscode") stroke = "#06b6d4";
       else if (sourceNode?.type === "obsidian") stroke = "#a855f7";
       else if (sourceNode?.type === "terminal") {
@@ -263,6 +270,7 @@ export default function Canvas() {
         label: `Note ${noteCounter}`,
         content: "",
         priority: 1,
+        commandMode: false,
       },
       style: { width: 350, height: 250 },
     });
@@ -349,6 +357,7 @@ export default function Canvas() {
             onAddVSCode={addVSCodeNode}
             onAddObsidian={addObsidianNode}
             onAddGroup={addGroupNode}
+            onOpenSettings={onOpenSettings}
             nodeCount={nodes.length}
           />
         </Panel>

@@ -38,6 +38,7 @@ export interface NoteNodeData {
   label: string;
   content: string;
   priority: number;
+  commandMode?: boolean;
   [key: string]: unknown;
 }
 
@@ -133,6 +134,14 @@ export interface CanvasGraph {
 export interface CleanupResult {
   killed_ptys: number;
   stopped_servers: number;
+}
+
+// -- Translator types --
+
+export interface TranslateResult {
+  command: string;
+  provider: string;
+  model: string;
 }
 
 // -- Sync response from backend --

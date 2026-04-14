@@ -3,6 +3,7 @@ mod code_server;
 mod context;
 mod persistence;
 mod supervisor;
+mod translator;
 mod vault;
 
 use tauri::Manager;
@@ -23,6 +24,7 @@ pub fn run() {
         .manage(code_server::CodeServerManager::new())
         .manage(context::ContextManager::new())
         .manage(supervisor::ProcessSupervisor::new())
+        .manage(translator::TranslatorService::new())
         .setup(|app| {
             println!("[maestri-x] Setup phase: initializing persistence...");
 
@@ -77,6 +79,12 @@ pub fn run() {
             persistence::commands::load_canvas,
             persistence::commands::list_canvases,
             persistence::commands::delete_canvas,
+            // settings
+            persistence::commands::get_setting,
+            persistence::commands::set_setting,
+            persistence::commands::get_all_settings,
+            // translator (AI command translation)
+            translator::commands::translate_and_inject,
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
