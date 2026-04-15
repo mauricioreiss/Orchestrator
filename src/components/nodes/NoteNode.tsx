@@ -2,7 +2,6 @@ import { memo, useState, useCallback, useRef, useEffect } from "react";
 import {
   Position,
   useReactFlow,
-  useEdges,
   type NodeProps,
 } from "@xyflow/react";
 import { invoke } from "../../lib/electron";
@@ -26,8 +25,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
   const [content, setContent] = useState(nodeData.content ?? "");
   const [execStatus, setExecStatus] = useState<ExecStatus>("idle");
   const [execError, setExecError] = useState<string | null>(null);
-  const { setNodes, getNode } = useReactFlow();
-  const edges = useEdges();
+  const { setNodes, getNode, getEdges } = useReactFlow();
   const { syncDebounced } = useCanvasSync();
   const setEdges = useCanvasStore((s) => s.setEdges);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,7 +81,8 @@ function NoteNode({ id, data, selected }: NodeProps) {
 
   const handleExecute = useCallback(async () => {
     if (!isElectron()) return;
-    const noteEdge = edges.find((e) => e.source === id);
+    // getEdges() reads on-demand (no reactive subscription to all edges)
+    const noteEdge = getEdges().find((e) => e.source === id);
     if (!noteEdge) return;
     const targetNode = getNode(noteEdge.target);
     if (!targetNode || targetNode.type !== "terminal") return;
@@ -110,7 +109,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
       setExecStatus("idle");
       setEdgeStatus("idle");
     }, 2000);
-  }, [id, edges, getNode, content, setEdgeStatus]);
+  }, [id, getEdges, getNode, content, setEdgeStatus]);
 
   const borderColor = commandMode ? "#7c3aed" : BORDER_COLOR;
 

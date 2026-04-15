@@ -1,5 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, session } from "electron";
+import { execSync } from "child_process";
 import path from "path";
+import log from "./log";
 import { PtyService } from "./services/PtyService";
 import { ProxyService } from "./services/ProxyService";
 import { PersistenceService } from "./services/PersistenceService";
@@ -38,6 +40,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // node-pty requires non-sandboxed main process
+      webviewTag: true, // BrowserNode uses <webview> instead of <iframe>
     },
     titleBarStyle: "hidden",
     titleBarOverlay: {
@@ -141,14 +144,48 @@ app.whenReady().then(() => {
   });
 });
 
-// Cleanup on quit
+// ---------------------------------------------------------------------------
+// Cleanup: kill ALL child processes before the app dies
+// ---------------------------------------------------------------------------
+
+/** Collect all known PIDs from services, then tree-kill each one synchronously. */
+function killAllChildProcesses(): void {
+  // 1. Let services do their own cleanup first (uses tree-kill async internally)
+  try { ptyService?.killAll(); } catch { /* ignore */ }
+  try { codeServerService?.stopAll(); } catch { /* ignore */ }
+  try { proxyService?.stopAll(); } catch { /* ignore */ }
+
+  // 2. Sync sweep: collect any remaining PIDs and force-kill them
+  const remainingPids = new Set<number>();
+  try { ptyService?.getAllPids().forEach((p) => remainingPids.add(p)); } catch { /* ignore */ }
+  try { codeServerService?.getAllPids().forEach((p) => remainingPids.add(p)); } catch { /* ignore */ }
+
+  if (remainingPids.size === 0) return;
+
+  log.info(`[maestri-x] Final sweep: killing ${remainingPids.size} remaining PIDs`);
+  for (const pid of remainingPids) {
+    try {
+      if (process.platform === "win32") {
+        execSync(`taskkill /F /T /PID ${pid}`, {
+          stdio: ["pipe", "pipe", "pipe"],
+          timeout: 5000,
+        });
+      } else {
+        process.kill(pid, "SIGKILL");
+      }
+      log.info(`[maestri-x] Swept PID ${pid}`);
+    } catch {
+      // Already dead, ignore
+    }
+  }
+}
+
 app.on("before-quit", () => {
-  ptyService?.killAll();
-  codeServerService?.stopAll();
-  proxyService?.stopAll();
+  killAllChildProcesses();
 });
 
 app.on("window-all-closed", () => {
+  killAllChildProcesses();
   if (process.platform !== "darwin") {
     app.quit();
   }
@@ -156,5 +193,5 @@ app.on("window-all-closed", () => {
 
 // Prevent non-critical native addon errors (conpty_console_list) from crashing the app
 process.on("uncaughtException", (err) => {
-  console.error("[Maestri-X] uncaught exception:", err.message);
+  log.error("[Maestri-X] uncaught exception:", err.message);
 });

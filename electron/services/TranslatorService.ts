@@ -3,6 +3,7 @@ import path from "path";
 import type { BrowserWindow } from "electron";
 import type { PtyService } from "./PtyService";
 import type { PersistenceService } from "./PersistenceService";
+import log from "../log";
 import type { TranslateResult } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -64,7 +65,7 @@ export class TranslatorService {
     // 1. Try local intercept before calling LLM
     const localCmd = tryLocalIntercept(noteContent, cwd);
     if (localCmd) {
-      console.log(`[maestri-x] Local intercept: ${localCmd}`);
+      log.info(`[maestri-x] Local intercept: ${localCmd}`);
       pty.write(ptyId, Array.from(Buffer.from(`${localCmd}\r\n`, "utf-8")));
 
       // Emit context-injection for the renderer to show the command
@@ -88,7 +89,7 @@ export class TranslatorService {
     const provider = parseProvider(providerStr);
     const modelName = modelSetting || DEFAULT_MODELS[provider];
 
-    console.log(
+    log.info(
       `[maestri-x] translate_and_inject: provider=${provider}, model=${modelName}, pty=${ptyId}`,
     );
 
@@ -102,11 +103,11 @@ export class TranslatorService {
       rawCommand = await callAnthropic(apiKey, modelName, systemPrompt, noteContent);
     }
 
-    console.log(`[maestri-x] Translated command (raw): ${rawCommand}`);
+    log.info(`[maestri-x] Translated command (raw): ${rawCommand}`);
 
     // 4. Sanitize LLM output
     const clean = sanitizeLlmCommand(rawCommand);
-    console.log(`[maestri-x] Sanitized command: ${clean}`);
+    log.info(`[maestri-x] Sanitized command: ${clean}`);
 
     // 5. Write to PTY
     pty.write(ptyId, Array.from(Buffer.from(`${clean}\r\n`, "utf-8")));

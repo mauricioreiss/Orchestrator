@@ -1,6 +1,7 @@
-import { memo, useState, useCallback, type ReactNode } from "react";
+import { memo, useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { Handle, Position, NodeResizer, useReactFlow } from "@xyflow/react";
 import { AnimatePresence } from "framer-motion";
+import { useCanvasSync } from "../../hooks/useCanvasSync";
 import NodeFullscreen from "./NodeFullscreen";
 
 interface HandleConfig {
@@ -57,7 +58,11 @@ function NodeWrapperInner({
   const activeBorder = borderOverride ?? borderColor;
   const showStatusBar = statusLeft !== undefined || statusRight !== undefined;
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { deleteElements } = useReactFlow();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editLabel, setEditLabel] = useState(label);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const { deleteElements, setNodes } = useReactFlow();
+  const { syncDebounced } = useCanvasSync();
 
   const handleClose = useCallback(() => {
     deleteElements({ nodes: [{ id }] });
@@ -66,6 +71,31 @@ function NodeWrapperInner({
   const handleMaximize = useCallback(() => {
     setIsFullscreen(true);
   }, []);
+
+  const commitRename = useCallback(() => {
+    const trimmed = editLabel.trim();
+    if (trimmed && trimmed !== label) {
+      setNodes((nds) =>
+        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, label: trimmed } } : n)),
+      );
+      syncDebounced();
+    } else {
+      setEditLabel(label);
+    }
+    setIsEditing(false);
+  }, [editLabel, label, id, setNodes, syncDebounced]);
+
+  const startEditing = useCallback(() => {
+    setEditLabel(label);
+    setIsEditing(true);
+  }, [label]);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
 
   return (
     <>
@@ -103,12 +133,40 @@ function NodeWrapperInner({
             borderBottom: "1px solid var(--mx-border)",
           }}
         >
-          <span
-            className="text-sm font-medium truncate max-w-[200px]"
-            style={{ color: "var(--mx-text)" }}
-          >
-            {label}
-          </span>
+          {isEditing ? (
+            <input
+              ref={inputRef}
+              value={editLabel}
+              onChange={(e) => setEditLabel(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commitRename();
+                if (e.key === "Escape") {
+                  setEditLabel(label);
+                  setIsEditing(false);
+                }
+              }}
+              className="text-sm font-medium bg-transparent outline-none border-b max-w-[200px] nodrag"
+              style={{ color: "var(--mx-text)", borderColor: activeBorder }}
+              spellCheck={false}
+            />
+          ) : (
+            <span
+              className="text-sm font-medium truncate max-w-[200px] group/rename flex items-center gap-1"
+              style={{ color: "var(--mx-text)" }}
+            >
+              {label}
+              <button
+                onClick={(e) => { e.stopPropagation(); startEditing(); }}
+                className="opacity-0 group-hover/rename:opacity-60 hover:!opacity-100 transition-opacity nodrag"
+                title="Rename"
+              >
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path d="M7.5 1.5l1 1-5.5 5.5-1.5.5.5-1.5z" stroke="currentColor" strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </span>
+          )}
           <div className="flex items-center gap-1.5">
             {titleBarExtra}
             {badges}

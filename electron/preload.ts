@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
+import log from "./log";
 
 const ALLOWED_INVOKE_CHANNELS = [
   "ping",
@@ -12,14 +13,15 @@ const ALLOWED_INVOKE_CHANNELS = [
   "translate_and_inject",
   "start_proxy", "stop_proxy", "list_proxies",
   "get_system_metrics",
+  "approve_agent_action", "reject_agent_action",
   "dialog:open",
 ] as const;
 
 type AllowedChannel = typeof ALLOWED_INVOKE_CHANNELS[number];
 
-const ALLOWED_EVENT_PREFIXES = ["pty-output-", "pty-exit-", "context-injection-"];
+const ALLOWED_EVENT_PREFIXES = ["pty-output-", "pty-exit-", "context-injection-", "pty-broadcast", "agent-approval"];
 
-contextBridge.exposeInMainWorld("electronAPI", {
+contextBridge.exposeInMainWorld("maestriAPI", {
   invoke: (channel: string, args?: Record<string, unknown>) => {
     if (!ALLOWED_INVOKE_CHANNELS.includes(channel as AllowedChannel)) {
       return Promise.reject(new Error(`IPC channel "${channel}" not allowed`));
@@ -29,7 +31,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   on: (channel: string, callback: (...args: unknown[]) => void) => {
     if (!ALLOWED_EVENT_PREFIXES.some((prefix) => channel.startsWith(prefix))) {
-      console.error(`Event channel "${channel}" not allowed`);
+      log.warn(`Event channel "${channel}" not allowed`);
       return () => {};
     }
     const subscription = (_event: Electron.IpcRendererEvent, ...args: unknown[]) =>

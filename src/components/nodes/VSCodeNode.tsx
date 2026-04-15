@@ -6,6 +6,7 @@ import { isElectron } from "../../lib/electron";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCodeServer } from "../../hooks/useCodeServer";
 import { useCanvasStore } from "../../store/canvasStore";
+import { useShallow } from "zustand/react/shallow";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#06b6d4";
@@ -15,7 +16,7 @@ function VSCodeNode({ id, data, selected, parentId }: NodeProps) {
   const nodeData = data as VSCodeNodeData;
   const label = nodeData.label ?? "VS Code";
 
-  const hibernatedGroups = useCanvasStore((s) => s.hibernatedGroups);
+  const hibernatedGroups = useCanvasStore(useShallow((s) => s.hibernatedGroups));
   const isHibernated = parentId ? hibernatedGroups.includes(parentId as string) : false;
 
   const [path, setPath] = useState(nodeData.workspacePath ?? "");
@@ -76,7 +77,11 @@ function VSCodeNode({ id, data, selected, parentId }: NodeProps) {
   const buildIframeUrl = useCallback(() => {
     if (!status) return "";
     const baseUrl = `http://127.0.0.1:${status.port}`;
-    const ws = (path || status.workspace || "").replace(/\\/g, "/");
+    let ws = (path || status.workspace || "").replace(/\\/g, "/");
+    // VS Code VFS requires leading slash on Windows (e.g. /C:/Users/...)
+    if (ws && !ws.startsWith("/")) {
+      ws = "/" + ws;
+    }
     const locale = "locale=en&hl=en";
     return ws ? `${baseUrl}/?folder=${encodeURIComponent(ws)}&${locale}` : `${baseUrl}/?${locale}`;
   }, [status, path]);

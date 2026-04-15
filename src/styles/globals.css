@@ -41,6 +41,10 @@
   --mx-warning: #f59e0b;
   --mx-error: #ef4444;
 
+  /* Canvas */
+  --mx-canvas-glow: rgba(124, 58, 237, 0.06);
+  --mx-grid-dot: rgba(255, 255, 255, 0.06);
+
   /* Sidebar */
   --mx-sidebar-bg: rgba(17, 17, 24, 0.95);
   --mx-sidebar-hover: rgba(255, 255, 255, 0.04);
@@ -84,6 +88,10 @@
   --mx-success: #10b981;
   --mx-warning: #f59e0b;
   --mx-error: #ef4444;
+
+  /* Canvas */
+  --mx-canvas-glow: rgba(124, 58, 237, 0.03);
+  --mx-grid-dot: rgba(0, 0, 0, 0.06);
 
   /* Sidebar */
   --mx-sidebar-bg: rgba(255, 255, 255, 0.95);

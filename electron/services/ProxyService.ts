@@ -1,6 +1,7 @@
 import http from "http";
 import net from "net";
 import { createProxyMiddleware } from "http-proxy-middleware";
+import log from "../log";
 import type { ProxyStatus } from "../types";
 
 const STRIPPED_HEADERS = [
@@ -65,7 +66,7 @@ export class ProxyService {
     });
 
     this.proxies.set(instanceId, { server, port: proxyPort, targetPort });
-    console.log(`[ProxyService] micro-proxy ${instanceId} :${proxyPort} -> :${targetPort}`);
+    log.info(`[ProxyService] micro-proxy ${instanceId} :${proxyPort} -> :${targetPort}`);
 
     return {
       instance_id: instanceId,
@@ -81,7 +82,7 @@ export class ProxyService {
 
     proxy.server.close();
     this.proxies.delete(instanceId);
-    console.log(`[ProxyService] stopped micro-proxy ${instanceId}`);
+    log.info(`[ProxyService] stopped micro-proxy ${instanceId}`);
   }
 
   list(): ProxyStatus[] {
@@ -102,7 +103,7 @@ export class ProxyService {
       proxy.server.close();
     }
     this.proxies.clear();
-    console.log("[ProxyService] stopped all micro-proxies");
+    log.info("[ProxyService] stopped all micro-proxies");
   }
 
   count(): number {

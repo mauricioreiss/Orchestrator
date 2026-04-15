@@ -5,6 +5,7 @@ import { isElectron } from "../../lib/electron";
 import { usePty } from "../../hooks/usePty";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
+import { useShallow } from "zustand/react/shallow";
 import type { TerminalNodeData } from "../../types";
 import NodeWrapper from "./NodeWrapper";
 import "@xterm/xterm/css/xterm.css";
@@ -43,7 +44,7 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
   const label = nodeData.label ?? "Terminal";
   const role = nodeData.role ?? "Agent";
 
-  const hibernatedGroups = useCanvasStore((s) => s.hibernatedGroups);
+  const hibernatedGroups = useCanvasStore(useShallow((s) => s.hibernatedGroups));
   const isHibernated = parentId ? hibernatedGroups.includes(parentId as string) : false;
 
   const { ptyId, connected } = usePty({

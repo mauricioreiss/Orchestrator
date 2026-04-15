@@ -1,26 +1,19 @@
 import { memo, useState, useCallback, useRef, useEffect } from "react";
 import { Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import { invoke } from "../../lib/electron";
-import type { BrowserNodeData, ProxyStatus } from "../../types";
+import type { BrowserNodeData } from "../../types";
 import { isElectron } from "../../lib/electron";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
+import { useShallow } from "zustand/react/shallow";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#f43f5e";
-const HANDLES = [{ type: "source" as const, position: Position.Right, color: "#f43f5e" }];
+const HANDLES = [
+  { type: "target" as const, position: Position.Left, color: "#f43f5e" },
+  { type: "source" as const, position: Position.Right, color: "#f43f5e" },
+];
 
-function parseLocalhostPort(url: string): number | null {
-  try {
-    const u = new URL(url);
-    if (u.hostname === "localhost" || u.hostname === "127.0.0.1") {
-      return parseInt(u.port, 10) || (u.protocol === "https:" ? 443 : 80);
-    }
-  } catch { /* invalid URL */ }
-  return null;
-}
-
-/** Normalize raw user input into a valid URL. Returns null if unresolvable. */
+/** Normalize raw user input into a valid URL. Returns null only for empty input. */
 function sanitizeUrl(raw: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
@@ -34,27 +27,25 @@ function sanitizeUrl(raw: string): string | null {
   // Has a dot → treat as domain (e.g. "google.com", "docs.rs/axum")
   if (trimmed.includes(".")) return `https://${trimmed}`;
 
-  // Bare word without dot (e.g. "youtube") → not a valid URL
-  return null;
+  // Bare word without dot (e.g. "youtube") → auto-complete with .com
+  return `https://${trimmed}.com`;
 }
 
 function BrowserNode({ id, data, selected, parentId }: NodeProps) {
   const nodeData = data as BrowserNodeData;
   const label = nodeData.label ?? "Browser";
 
-  const hibernatedGroups = useCanvasStore((s) => s.hibernatedGroups);
+  const hibernatedGroups = useCanvasStore(useShallow((s) => s.hibernatedGroups));
   const isHibernated = parentId ? hibernatedGroups.includes(parentId as string) : false;
 
   const [url, setUrl] = useState(nodeData.url || "");
   const [activeUrl, setActiveUrl] = useState(nodeData.url || "");
-  const [proxyPort, setProxyPort] = useState<number | null>(null);
-  const [iframeKey, setIframeKey] = useState(0);
+  const [viewKey, setViewKey] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const webviewRef = useRef<HTMLWebViewElement>(null);
 
   const { setNodes } = useReactFlow();
   const { syncDebounced } = useCanvasSync();
-  const proxyPortRef = useRef<number | null>(null);
-  proxyPortRef.current = proxyPort;
 
   const persistUrl = useCallback(
     (newUrl: string) => {
@@ -67,61 +58,63 @@ function BrowserNode({ id, data, selected, parentId }: NodeProps) {
   );
 
   const navigate = useCallback(
-    async (targetUrl: string) => {
+    (targetUrl: string) => {
       const normalizedUrl = sanitizeUrl(targetUrl);
       if (!normalizedUrl) {
-        setError("URL invalida. Use um dominio completo (ex: google.com) ou localhost:porta.");
+        setError("Digite uma URL para navegar.");
         return;
       }
       setUrl(normalizedUrl);
+      setActiveUrl(normalizedUrl);
       setError(null);
-      if (proxyPortRef.current && isElectron()) {
-        await invoke("stop_proxy", { instanceId: id }).catch(() => {});
-        setProxyPort(null);
-      }
-      const localhostPort = parseLocalhostPort(normalizedUrl);
-      if (localhostPort && isElectron()) {
-        // Localhost: route through Express proxy for WebSocket support
-        try {
-          const ps = await invoke<ProxyStatus>("start_proxy", { instanceId: id, targetPort: localhostPort });
-          setProxyPort(ps.proxy_port);
-          const parsed = new URL(normalizedUrl);
-          const proxyBase = `http://127.0.0.1:${ps.proxy_port}`;
-          const pathAndQuery = parsed.pathname + parsed.search + parsed.hash;
-          setActiveUrl(`${proxyBase}${pathAndQuery}`);
-        } catch (e) {
-          setError(`Proxy failed: ${e}`);
-          setActiveUrl(normalizedUrl);
-        }
-      } else {
-        // External URL: Electron session.webRequest strips X-Frame-Options/CSP
-        // so iframe loads the URL directly — no proxy needed
-        setActiveUrl(normalizedUrl);
-      }
-      setIframeKey((k) => k + 1);
+      setViewKey((k) => k + 1);
       persistUrl(normalizedUrl);
     },
-    [id, persistUrl],
+    [persistUrl],
   );
+
+  // Webview navigation listener: sync URL bar when user navigates inside the page
+  useEffect(() => {
+    const wv = webviewRef.current;
+    if (!wv) return;
+
+    const onNavigate = (e: Event) => {
+      const navUrl = (e as any).url;
+      if (navUrl) setUrl(navUrl);
+    };
+
+    wv.addEventListener("did-navigate", onNavigate);
+    wv.addEventListener("did-navigate-in-page", onNavigate);
+
+    return () => {
+      wv.removeEventListener("did-navigate", onNavigate);
+      wv.removeEventListener("did-navigate-in-page", onNavigate);
+    };
+  }, [viewKey]); // re-attach when webview remounts
+
+  // React to external URL changes (e.g., Smart Context: VSCode → Browser)
+  useEffect(() => {
+    if (nodeData.url && nodeData.url !== activeUrl && !isHibernated) {
+      navigate(nodeData.url);
+    }
+  }, [nodeData.url]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === "Enter") { e.preventDefault(); navigate(url); }
   }, [url, navigate]);
 
-  const handleReload = useCallback(() => { setIframeKey((k) => k + 1); }, []);
+  const handleReload = useCallback(() => {
+    const wv = webviewRef.current as any;
+    if (wv?.reload) wv.reload();
+    else setViewKey((k) => k + 1);
+  }, []);
 
+  // Hibernation: clear active URL
   useEffect(() => {
-    return () => { if (isElectron()) invoke("stop_proxy", { instanceId: id }).catch(() => {}); };
-  }, [id]);
+    if (isHibernated) setActiveUrl("");
+  }, [isHibernated]);
 
-  useEffect(() => {
-    if (isHibernated && isElectron()) {
-      invoke("stop_proxy", { instanceId: id }).catch(() => {});
-      setProxyPort(null);
-      setActiveUrl("");
-    }
-  }, [isHibernated, id]);
-
+  // Auto-navigate on first mount if URL was persisted
   useEffect(() => {
     if (nodeData.url && !activeUrl && !isHibernated && isElectron()) navigate(nodeData.url);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -200,7 +193,7 @@ function BrowserNode({ id, data, selected, parentId }: NodeProps) {
         </span>
       }
       statusLeft={<span className="truncate max-w-[300px]" title={activeUrl}>{activeUrl || "no page loaded"}</span>}
-      statusRight={<span style={{ color: "rgba(244,63,94,0.6)" }}>{proxyPort ? `proxy :${proxyPort}` : "browser"}</span>}
+      statusRight={<span style={{ color: "rgba(244,63,94,0.6)" }}>browser</span>}
       handles={HANDLES}
     >
       {/* URL bar */}
@@ -228,14 +221,15 @@ function BrowserNode({ id, data, selected, parentId }: NodeProps) {
         </button>
       </div>
 
-      {/* iframe or empty state */}
+      {/* Webview or empty state */}
       {isLive ? (
-        <iframe
-          key={iframeKey}
+        <webview
+          key={viewKey}
+          ref={webviewRef}
           src={activeUrl}
-          className="flex-1 min-h-0 w-full border-0 bg-white nodrag nowheel"
-          title={`Browser: ${url}`}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+          allowpopups
+          className="flex-1 min-h-0 w-full nodrag nowheel"
+          style={{ background: "white" }}
         />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6">
@@ -247,7 +241,7 @@ function BrowserNode({ id, data, selected, parentId }: NodeProps) {
             Digite uma URL e clique Go
           </p>
           <p className="text-[11px] text-center max-w-[280px]" style={{ color: "var(--mx-text-muted)" }}>
-            URLs localhost passam pelo reverse proxy automaticamente (strip X-Frame-Options).
+            Conecte um VSCodeNode para abrir o Live Preview automaticamente.
           </p>
         </div>
       )}

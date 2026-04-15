@@ -3,6 +3,7 @@ import { Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import type { ApiNodeData } from "../../types";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
+import { useShallow } from "zustand/react/shallow";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#f97316";
@@ -34,7 +35,7 @@ function ApiNode({ id, data, selected, parentId }: NodeProps) {
   const nodeData = data as ApiNodeData;
   const label = nodeData.label ?? "API";
 
-  const hibernatedGroups = useCanvasStore((s) => s.hibernatedGroups);
+  const hibernatedGroups = useCanvasStore(useShallow((s) => s.hibernatedGroups));
   const isHibernated = parentId ? hibernatedGroups.includes(parentId as string) : false;
 
   const [method, setMethod] = useState<HttpMethod>(nodeData.method ?? "GET");

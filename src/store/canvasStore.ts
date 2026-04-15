@@ -18,6 +18,8 @@ const CANVAS_ID = "default";
 const CANVAS_NAME = "Main Canvas";
 const SAVE_DEBOUNCE_MS = 2000;
 
+type SaveStatus = "idle" | "saving" | "saved";
+
 interface CanvasStore {
   // State
   nodes: Node[];
@@ -25,6 +27,7 @@ interface CanvasStore {
   viewport: Viewport;
   loaded: boolean;
   hibernatedGroups: string[];
+  saveStatus: SaveStatus;
 
   // Node/Edge mutations (React Flow compatible)
   onNodesChange: (changes: NodeChange[]) => void;
@@ -53,11 +56,14 @@ interface CanvasStore {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let savedResetTimer: ReturnType<typeof setTimeout> | null = null;
 
-function scheduleSave(store: CanvasStore) {
+function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
+  if (savedResetTimer) clearTimeout(savedResetTimer);
+  useCanvasStore.setState({ saveStatus: "saving" });
   saveTimer = setTimeout(() => {
-    store.save();
+    useCanvasStore.getState().save();
   }, SAVE_DEBOUNCE_MS);
 }
 
@@ -67,6 +73,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   viewport: { x: 0, y: 0, zoom: 1 },
   loaded: false,
   hibernatedGroups: [],
+  saveStatus: "idle" as SaveStatus,
 
   onNodesChange: (changes) => {
     // Detect node removals and cleanup processes before applying
@@ -93,13 +100,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     }
 
     set({ nodes: applyNodeChanges(changes, get().nodes) });
-    scheduleSave(get());
+    scheduleSave();
   },
 
   onEdgesChange: (changes) => {
     set({ edges: applyEdgeChanges(changes, get().edges) });
     const hasRemoval = changes.some((c) => c.type === "remove");
-    if (hasRemoval) scheduleSave(get());
+    if (hasRemoval) scheduleSave();
   },
 
   onConnect: (connection, stroke = "#7c3aed") => {
@@ -109,7 +116,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         get().edges,
       ),
     });
-    scheduleSave(get());
+    scheduleSave();
   },
 
   setNodes: (updater) => {
@@ -139,7 +146,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     } else {
       set({ nodes: [...current, node] });
     }
-    scheduleSave(get());
+    scheduleSave();
   },
 
   addTerminalNode: () => {
@@ -270,8 +277,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         name: CANVAS_NAME,
         data,
       });
+      set({ saveStatus: "saved" });
+      if (savedResetTimer) clearTimeout(savedResetTimer);
+      savedResetTimer = setTimeout(() => {
+        useCanvasStore.setState({ saveStatus: "idle" });
+      }, 2000);
     } catch (e) {
       console.error("canvas save failed:", e);
+      set({ saveStatus: "idle" });
     }
   },
 

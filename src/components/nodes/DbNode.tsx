@@ -3,6 +3,7 @@ import { Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import type { DbNodeData } from "../../types";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
+import { useShallow } from "zustand/react/shallow";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#0ea5e9";
@@ -55,7 +56,7 @@ function DbNode({ id, data, selected, parentId }: NodeProps) {
   const nodeData = data as DbNodeData;
   const label = nodeData.label ?? "Database";
 
-  const hibernatedGroups = useCanvasStore((s) => s.hibernatedGroups);
+  const hibernatedGroups = useCanvasStore(useShallow((s) => s.hibernatedGroups));
   const isHibernated = parentId ? hibernatedGroups.includes(parentId as string) : false;
 
   const [query, setQuery] = useState(nodeData.query ?? "");

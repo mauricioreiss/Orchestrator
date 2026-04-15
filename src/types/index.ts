@@ -72,14 +72,18 @@ export interface BrowserNodeData {
   [key: string]: unknown;
 }
 
+export type CardPriority = "green" | "yellow" | "orange" | "red";
+
 export interface KanbanCard {
   id: string;
   title: string;
+  priority?: CardPriority;
 }
 
 export interface KanbanColumn {
   id: string;
   title: string;
+  color?: string;
   cards: KanbanCard[];
 }
 

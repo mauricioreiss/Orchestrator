@@ -3,6 +3,8 @@ import path from "path";
 import fs from "fs";
 import os from "os";
 import { v4 as uuidv4 } from "uuid";
+import treeKill from "tree-kill";
+import log from "../log";
 import type { CodeServerDetection, CodeServerStatus } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -111,7 +113,7 @@ export class CodeServerService {
     const url = `http://127.0.0.1:${port}`;
     const ws = workspace ?? "";
 
-    console.log(
+    log.info(
       `[maestri-x] Starting VS Code server ${instanceId} on port ${port}`,
     );
 
@@ -136,7 +138,7 @@ export class CodeServerService {
             "code.cmd",
           );
           if (fs.existsSync(fallback)) {
-            console.log(`[maestri-x] Trying fallback: ${fallback}`);
+            log.info(`[maestri-x] Trying fallback: ${fallback}`);
             child = this.spawnServeWeb(fallback, port, ws);
           }
         }
@@ -174,7 +176,7 @@ export class CodeServerService {
         // Check TCP to confirm.
         setTimeout(() => {
           if (this.tcpCheck(port)) {
-            console.log(
+            log.info(
               `[maestri-x] VS Code launcher exited (code 0) but server alive on port ${port} -- TCP-only tracking`,
             );
             instance.launcherExited = true;
@@ -210,11 +212,7 @@ export class CodeServerService {
     if (inst.launcherExited) {
       this.killByPort(inst.port);
     } else {
-      try {
-        inst.process.kill();
-      } catch {
-        // Process may already be dead
-      }
+      this.killProcessTree(inst);
     }
   }
 
@@ -227,11 +225,7 @@ export class CodeServerService {
       if (inst.launcherExited) {
         this.killByPort(inst.port);
       } else {
-        try {
-          inst.process.kill();
-        } catch {
-          // ignore
-        }
+        this.killProcessTree(inst);
       }
     }
     this.instances.clear();
@@ -276,7 +270,7 @@ export class CodeServerService {
       // Server actually died
       const workspace = inst.workspace;
       this.instances.delete(instanceId);
-      console.log(
+      log.info(
         `[maestri-x] Detached VS Code server ${instanceId} is no longer reachable`,
       );
       return {
@@ -322,7 +316,7 @@ export class CodeServerService {
         : `exit code: ${exitCode}`;
 
       this.instances.delete(instanceId);
-      console.log(
+      log.info(
         `[maestri-x] VS Code server ${instanceId} died (port ${inst.port}): ${errorMsg}`,
       );
 
@@ -426,11 +420,11 @@ export class CodeServerService {
     const cliJs = this.findCliJs(vscodeRoot);
 
     if (!fs.existsSync(codeExe)) {
-      console.log(`[maestri-x] Code.exe not found at ${codeExe}`);
+      log.info(`[maestri-x] Code.exe not found at ${codeExe}`);
       return null;
     }
     if (!cliJs) {
-      console.log(`[maestri-x] cli.js not found in ${vscodeRoot}`);
+      log.info(`[maestri-x] cli.js not found in ${vscodeRoot}`);
       return null;
     }
 
@@ -439,7 +433,7 @@ export class CodeServerService {
       `maestri-x-vscode-${port}`,
     );
 
-    console.log(
+    log.info(
       `[maestri-x] spawn Code.exe directly: ELECTRON_RUN_AS_NODE=1 "${codeExe}" "${cliJs}" serve-web --host 127.0.0.1 --port ${port}`,
     );
 
@@ -466,10 +460,10 @@ export class CodeServerService {
         },
       );
 
-      console.log(`[maestri-x] Code.exe spawned (PID: ${child.pid})`);
+      log.info(`[maestri-x] Code.exe spawned (PID: ${child.pid})`);
       return child;
     } catch (e) {
-      console.log(`[maestri-x] Code.exe spawn failed: ${e}`);
+      log.info(`[maestri-x] Code.exe spawn failed: ${e}`);
       return null;
     }
   }
@@ -501,7 +495,7 @@ export class CodeServerService {
       "--disable-telemetry",
     ];
 
-    console.log(
+    log.info(
       `[maestri-x] spawn_serve_web (fallback): ${binary} ${args.join(" ")}`,
     );
 
@@ -520,7 +514,7 @@ export class CodeServerService {
 
       return spawn(binary, args, opts);
     } catch (e) {
-      console.log(`[maestri-x] spawn_serve_web failed: ${e}`);
+      log.info(`[maestri-x] spawn_serve_web failed: ${e}`);
       return null;
     }
   }
@@ -553,6 +547,38 @@ export class CodeServerService {
   }
 
   // -----------------------------------------------------------------------
+  // Internal: kill process and entire child tree
+  // -----------------------------------------------------------------------
+
+  private killProcessTree(inst: CodeServerInstance): void {
+    const pid = inst.process.pid;
+
+    if (pid == null) {
+      try { inst.process.kill(); } catch { /* already dead */ }
+      return;
+    }
+
+    // tree-kill sends SIGKILL to entire process tree (cross-platform)
+    treeKill(pid, "SIGKILL", (err) => {
+      if (err) {
+        log.info(`[maestri-x] tree-kill failed for PID ${pid}: ${err.message}, trying port fallback`);
+        this.killByPort(inst.port);
+      } else {
+        log.info(`[maestri-x] tree-kill OK (PID ${pid})`);
+      }
+    });
+  }
+
+  /** Collect all tracked PIDs for external cleanup (e.g. before-quit sweep). */
+  getAllPids(): number[] {
+    const pids: number[] = [];
+    for (const inst of this.instances.values()) {
+      if (inst.process.pid != null) pids.push(inst.process.pid);
+    }
+    return pids;
+  }
+
+  // -----------------------------------------------------------------------
   // Internal: kill process by port
   // -----------------------------------------------------------------------
 
@@ -572,7 +598,7 @@ export class CodeServerService {
             const pid = parts[parts.length - 1];
             const pidNum = parseInt(pid, 10);
             if (!isNaN(pidNum) && pidNum > 0) {
-              console.log(
+              log.info(
                 `[maestri-x] Killing detached server PID ${pidNum} on port ${port}`,
               );
               try {
@@ -590,7 +616,7 @@ export class CodeServerService {
       } catch {
         // netstat failed
       }
-      console.log(
+      log.info(
         `[maestri-x] No process found listening on port ${port}`,
       );
     } else {

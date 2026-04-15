@@ -1,12 +1,35 @@
 import { useState, useEffect, useCallback } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
+import { Toaster } from "sonner";
 import { invoke, isElectron } from "./lib/electron";
 import Canvas from "./components/Canvas";
 import Sidebar from "./components/Sidebar";
 import BootScreen from "./components/BootScreen";
 import SettingsModal from "./components/SettingsModal";
-import { ThemeProvider } from "./contexts/ThemeContext";
+import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { useCanvasStore } from "./store/canvasStore";
+import { useApprovalListener } from "./hooks/useApprovalListener";
+
+/** Renders Toaster with current theme from context. */
+function ThemedToaster() {
+  const { theme } = useTheme();
+  return (
+    <Toaster
+      position="top-right"
+      theme={theme}
+      richColors
+      toastOptions={{
+        style: {
+          background: "var(--mx-glass-bg)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          border: "1px solid var(--mx-glass-border)",
+          fontFamily: "Inter, system-ui, sans-serif",
+        },
+      }}
+    />
+  );
+}
 
 export default function App() {
   const [showBoot, setShowBoot] = useState(false);
@@ -14,6 +37,9 @@ export default function App() {
   const [bridgeStatus, setBridgeStatus] = useState<"checking" | "ok" | "fail">("checking");
   const loaded = useCanvasStore((s) => s.loaded);
   const nodeCount = useCanvasStore((s) => s.nodes.length);
+
+  // HITL: listen for agent approval requests and show toasts
+  useApprovalListener();
 
   useEffect(() => {
     const electronDetected = isElectron();
@@ -42,6 +68,7 @@ export default function App() {
 
   return (
     <ThemeProvider>
+      <ThemedToaster />
       <ReactFlowProvider>
         <div className="flex w-full h-full" style={{ background: "var(--mx-bg)" }}>
           <Sidebar onOpenSettings={openSettings} />

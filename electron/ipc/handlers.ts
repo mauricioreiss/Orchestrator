@@ -8,6 +8,7 @@ import type { SupervisorService } from "../services/SupervisorService";
 import type { TranslatorService } from "../services/TranslatorService";
 import type { ProxyService } from "../services/ProxyService";
 import type { MonitorService } from "../services/MonitorService";
+import log from "../log";
 import type { CanvasGraph, ContextAction, SyncResult } from "../types";
 
 interface Services {
@@ -39,15 +40,12 @@ function executeContextActions(
   for (const action of actions) {
     switch (action.type) {
       case "dispatch_note": {
-        // Format ANSI injection
-        const clearScreen = "\x1b[2J\x1b[H";
-        const header = action.isLeaderContext
-          ? `\x1b[1;32m━━━ LEADER BRIEFING ━━━\x1b[0m\n`
-          : `\x1b[1;33m━━━ Context Injection ━━━\x1b[0m\n`;
-        const formatted = `${clearScreen}${header}\x1b[37m${action.content}\x1b[0m\n\x1b[90m━━━━━━━━━━━━━━━━━━━━━━━━\x1b[0m\n`;
-
-        // Emit context-injection event to renderer (bypasses PTY stdin)
-        win?.webContents.send(`context-injection-${action.ptyId}`, formatted);
+        // Write raw note content directly to PTY stdin (no ANSI banners)
+        try {
+          const payload = action.content + "\r\n";
+          const bytes = Array.from(Buffer.from(payload, "utf-8"));
+          pty.write(action.ptyId, bytes);
+        } catch { /* PTY may already be dead */ }
 
         if (action.isLeaderContext) result.leader_contexts++;
         else result.dispatched++;
@@ -62,8 +60,8 @@ function executeContextActions(
         break;
       }
       case "clear_instruction": {
-        const clearMsg = "\x1b[2J\x1b[H\x1b[90m[Context cleared]\x1b[0m\n";
-        win?.webContents.send(`context-injection-${action.ptyId}`, clearMsg);
+        // No-op: context is now written directly to PTY stdin,
+        // so "clearing" just means we stop sending new content.
         break;
       }
       case "set_cwd": {
@@ -90,9 +88,14 @@ export function registerIpcHandlers(services: Services): void {
   ipcMain.handle("ping", () => "pong");
 
   // === PTY (7) ===
-  ipcMain.handle("spawn_pty", (_e, args: { cols: number; rows: number; cwd?: string; label?: string }) =>
-    pty.spawn(args.cols, args.rows, args.cwd, args.label),
-  );
+  ipcMain.handle("spawn_pty", (_e, args: { cols: number; rows: number; cwd?: string; label?: string }) => {
+    // Hard-sanitize at IPC boundary: values may arrive as null/undefined/NaN after serialization
+    const safeCols = Number(args.cols) || 80;
+    const safeRows = Number(args.rows) || 24;
+    const safeCwd = (typeof args.cwd === "string" && args.cwd) ? args.cwd : undefined;
+    const safeLabel = (typeof args.label === "string" && args.label) ? args.label : undefined;
+    return pty.spawn(safeCols, safeRows, safeCwd, safeLabel);
+  });
   ipcMain.handle("write_pty", (_e, args: { id: string; data: number[] }) =>
     pty.write(args.id, args.data),
   );
@@ -188,4 +191,89 @@ export function registerIpcHandlers(services: Services): void {
   ipcMain.handle("get_system_metrics", () =>
     monitor.getMetrics(pty.count(), codeServer.count()),
   );
+
+  // === HITL (Human-in-the-Loop) (2) ===
+  ipcMain.handle("approve_agent_action", (_e, args: { ptyId: string }) => {
+    const cmd = pty.approvePending(args.ptyId);
+    if (cmd) log.info(`[HITL] Approved: ${cmd}`);
+    return { approved: !!cmd, command: cmd };
+  });
+  ipcMain.handle("reject_agent_action", (_e, args: { ptyId: string }) => {
+    const cmd = pty.rejectPending(args.ptyId);
+    if (cmd) log.info(`[HITL] Rejected: ${cmd}`);
+    return { rejected: !!cmd, command: cmd };
+  });
+
+  // === Broadcast Handler ===
+  // When PtyService detects [BROADCAST] in a terminal's output, fan-out
+  // the command to all terminal nodes connected as targets from the source.
+  pty.setBroadcastHandler((sourcePtyId, command) => {
+    const graph = context.getLastGraph();
+    if (!graph) return;
+
+    // Find the terminal node that owns this PTY
+    const sourceNode = graph.nodes.find(
+      (n) => n.type === "terminal" && n.data?.ptyId === sourcePtyId,
+    );
+    if (!sourceNode) return;
+
+    // Find all edges from source to other terminals
+    const targetEdges = graph.edges.filter(
+      (e) => e.source === sourceNode.id && e.targetType === "terminal",
+    );
+
+    const targetNodeIds: string[] = [];
+    for (const edge of targetEdges) {
+      const targetNode = graph.nodes.find((n) => n.id === edge.target);
+      if (!targetNode) continue;
+
+      const targetPtyId = targetNode.data?.ptyId;
+      if (typeof targetPtyId !== "string" || !targetPtyId) continue;
+
+      try {
+        const payload = command + "\r\n";
+        const bytes = Array.from(Buffer.from(payload, "utf-8"));
+        pty.write(targetPtyId, bytes);
+        targetNodeIds.push(edge.target);
+      } catch { /* target PTY may be dead */ }
+    }
+
+    if (targetNodeIds.length > 0) {
+      log.info(`[Broadcast] ${sourceNode.id} → ${targetNodeIds.length} targets: ${command}`);
+      const win = getWindow();
+      win?.webContents.send("pty-broadcast", {
+        source: sourceNode.id,
+        targets: targetNodeIds,
+        command,
+      });
+    }
+  });
+
+  // === Approval Handler ===
+  // When PtyService detects [ASK_APPROVAL], resolve ptyId→nodeId and notify frontend.
+  pty.setApprovalHandler((sourcePtyId, command) => {
+    const graph = context.getLastGraph();
+    let nodeLabel = "Terminal";
+    let nodeId = "";
+
+    if (graph) {
+      const sourceNode = graph.nodes.find(
+        (n) => n.type === "terminal" && n.data?.ptyId === sourcePtyId,
+      );
+      if (sourceNode) {
+        nodeId = sourceNode.id;
+        const label = sourceNode.data?.label;
+        if (typeof label === "string") nodeLabel = label;
+      }
+    }
+
+    log.info(`[HITL] Approval requested by ${nodeLabel}: ${command}`);
+    const win = getWindow();
+    win?.webContents.send("agent-approval-request", {
+      ptyId: sourcePtyId,
+      nodeId,
+      nodeLabel,
+      command,
+    });
+  });
 }

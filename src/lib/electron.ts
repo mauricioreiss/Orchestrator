@@ -3,11 +3,7 @@
  * Returns false when running in a plain browser (e.g. `npm run dev` without Electron).
  */
 export function isElectron(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (window as any).electronAPI !== undefined
-  );
+  return typeof window !== "undefined" && window.maestriAPI !== undefined;
 }
 
 /** Invoke an IPC command on the Electron main process. */
@@ -15,8 +11,7 @@ export async function invoke<T>(
   channel: string,
   args?: Record<string, unknown>,
 ): Promise<T> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (window as any).electronAPI.invoke(channel, args ?? {});
+  return window.maestriAPI.invoke(channel, args ?? {}) as Promise<T>;
 }
 
 /** Listen for events from the Electron main process. Returns a synchronous unlisten function. */
@@ -24,8 +19,7 @@ export function listen<T>(
   event: string,
   callback: (payload: T) => void,
 ): () => void {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (window as any).electronAPI.on(event, (payload: T) => callback(payload));
+  return window.maestriAPI.on(event, (payload) => callback(payload as T));
 }
 
 /** Open a native file/folder dialog. */
@@ -34,8 +28,7 @@ export async function openDialog(options: {
   multiple?: boolean;
   title?: string;
 }): Promise<string | null> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (window as any).electronAPI.showOpenDialog({
+  return window.maestriAPI.showOpenDialog({
     properties: [
       options.directory ? "openDirectory" : "openFile",
       ...(options.multiple ? (["multiSelections"] as const) : []),

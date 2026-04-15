@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, type ComponentType } from "react";
 import {
   ReactFlow,
   Background,
@@ -14,6 +14,7 @@ import {
   type IsValidConnection,
   type Viewport,
   type Node,
+  type NodeProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -26,13 +27,28 @@ import KanbanNode from "./nodes/KanbanNode";
 import ApiNode from "./nodes/ApiNode";
 import DbNode from "./nodes/DbNode";
 import ProjectGroupNode from "./nodes/ProjectGroupNode";
+import NodeErrorBoundary from "./nodes/NodeErrorBoundary";
 import FlowEdge from "./edges/FlowEdge";
 import StatusBar from "./StatusBar";
 import { useCanvasSync } from "../hooks/useCanvasSync";
 import { useHibernation } from "../hooks/useHibernation";
 import { useViewportCulling } from "../hooks/useViewportCulling";
+import { useBroadcast } from "../hooks/useBroadcast";
 import { useCanvasStore } from "../store/canvasStore";
-import type { TerminalNodeData, NoteNodeData, GroupNodeData } from "../types";
+import { invoke, isElectron } from "../lib/electron";
+import type { TerminalNodeData, NoteNodeData, VSCodeNodeData, GroupNodeData } from "../types";
+
+// HOC: wraps each node type with an Error Boundary so a crash in one
+// node doesn't tear down the entire React Flow canvas.
+function withErrorBoundary(Wrapped: ComponentType<NodeProps>) {
+  return function ErrorBoundaryNode(props: NodeProps) {
+    return (
+      <NodeErrorBoundary nodeId={props.id}>
+        <Wrapped {...props} />
+      </NodeErrorBoundary>
+    );
+  };
+}
 
 const NODE_EDGE_COLORS: Record<string, string> = {
   Leader: "#10b981",
@@ -42,15 +58,15 @@ const NODE_EDGE_COLORS: Record<string, string> = {
 };
 
 const nodeTypes: NodeTypes = {
-  terminal: TerminalNode,
-  note: NoteNode,
-  vscode: VSCodeNode,
-  obsidian: ObsidianNode,
-  browser: BrowserNode,
-  kanban: KanbanNode,
-  api: ApiNode,
-  db: DbNode,
-  group: ProjectGroupNode,
+  terminal: withErrorBoundary(TerminalNode),
+  note: withErrorBoundary(NoteNode),
+  vscode: withErrorBoundary(VSCodeNode),
+  obsidian: withErrorBoundary(ObsidianNode),
+  browser: withErrorBoundary(BrowserNode),
+  kanban: withErrorBoundary(KanbanNode),
+  api: withErrorBoundary(ApiNode),
+  db: withErrorBoundary(DbNode),
+  group: withErrorBoundary(ProjectGroupNode),
 };
 
 const edgeTypes: EdgeTypes = {
@@ -74,6 +90,7 @@ export default function Canvas() {
   const { syncDebounced } = useCanvasSync();
   useHibernation();
   useViewportCulling();
+  useBroadcast();
 
   useEffect(() => { load(); }, [load]);
 
@@ -93,6 +110,7 @@ export default function Canvas() {
       if (s === "kanban" && t === "terminal") return true;
       if (s === "api" && t === "terminal") return true;
       if (s === "db" && t === "terminal") return true;
+      if (s === "vscode" && t === "browser") return true;
       return false;
     },
     [getNode],
@@ -101,6 +119,8 @@ export default function Canvas() {
   const onConnect: OnConnect = useCallback(
     (params) => {
       const sourceNode = getNode(params.source);
+      const targetNode = getNode(params.target);
+
       let stroke = "#7c3aed";
       if (sourceNode?.type === "note") {
         const noteData = sourceNode.data as NoteNodeData;
@@ -116,9 +136,53 @@ export default function Canvas() {
         stroke = NODE_EDGE_COLORS[role] ?? "#7c3aed";
       }
       storeConnect(params, stroke);
+
+      // Smart Context: VSCode → Terminal inherits workspace folder
+      if (
+        sourceNode?.type === "vscode" &&
+        targetNode?.type === "terminal" &&
+        isElectron()
+      ) {
+        const workspacePath = (sourceNode.data as VSCodeNodeData)?.workspacePath;
+        if (workspacePath) {
+          // Update terminal node's cwd in store (used by future PTY spawns)
+          setNodes((nds) =>
+            nds.map((n) =>
+              n.id === params.target
+                ? { ...n, data: { ...n.data, cwd: workspacePath } }
+                : n,
+            ),
+          );
+          // If terminal already has a live PTY, cd into the folder
+          const ptyId = (targetNode.data as TerminalNodeData)?.ptyId;
+          if (ptyId) {
+            const cdCmd = `cd "${workspacePath}"\r\n`;
+            const bytes = Array.from(new TextEncoder().encode(cdCmd));
+            invoke("write_pty", { id: ptyId, data: bytes }).catch((e) =>
+              console.error("[SmartContext] cd failed:", e),
+            );
+          }
+        }
+      }
+
+      // Smart Context: VSCode → Browser injects default dev URL (Vite :5173)
+      if (
+        sourceNode?.type === "vscode" &&
+        targetNode?.type === "browser"
+      ) {
+        const devUrl = "http://localhost:5173";
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.id === params.target
+              ? { ...n, data: { ...n.data, url: devUrl } }
+              : n,
+          ),
+        );
+      }
+
       syncDebounced();
     },
-    [storeConnect, syncDebounced, getNode],
+    [storeConnect, syncDebounced, getNode, setNodes],
   );
 
   const handleEdgesChange = useCallback(
@@ -193,7 +257,12 @@ export default function Canvas() {
   );
 
   return (
-    <div className="w-full h-full">
+    <div
+      className="w-full h-full"
+      style={{
+        background: `radial-gradient(ellipse 80% 50% at 50% -20%, var(--mx-canvas-glow), transparent), var(--mx-bg)`,
+      }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -208,7 +277,6 @@ export default function Canvas() {
         fitView={!loaded || nodes.length === 0}
         proOptions={{ hideAttribution: true }}
         defaultEdgeOptions={{ animated: true, style: { stroke: "#7c3aed" } }}
-        className="bg-mx-bg"
         minZoom={0.1}
         maxZoom={2}
       >
@@ -218,9 +286,9 @@ export default function Canvas() {
 
         <Background
           variant={BackgroundVariant.Dots}
-          gap={24}
-          size={1}
-          color="var(--mx-border-strong)"
+          gap={20}
+          size={0.8}
+          color="var(--mx-grid-dot)"
         />
         <Controls />
         <MiniMap

@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, Globe, Database } from "lucide-react";
+import { LayoutDashboard, Globe, Database, Settings } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
 import { useCanvasStore } from "../store/canvasStore";
 
@@ -236,10 +236,7 @@ export default function Sidebar({ onOpenSettings }: SidebarProps) {
           onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           title="Settings"
         >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="shrink-0">
-            <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.4" />
-            <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.2 4.2l1.4 1.4M14.4 14.4l1.4 1.4M15.8 4.2l-1.4 1.4M5.6 14.4l-1.4 1.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          </svg>
+          <Settings size={20} className="shrink-0" />
           <AnimatePresence>
             {expanded && (
               <motion.span className="text-xs font-medium" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

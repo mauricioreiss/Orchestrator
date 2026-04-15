@@ -70,6 +70,11 @@ export class ContextService {
   /** terminalNodeId -> last cwd sent */
   private cwdSent = new Map<string, string>();
 
+  /** Return the last synced graph snapshot (used by broadcast handler). */
+  getLastGraph(): CanvasGraph | null {
+    return this.prevGraph;
+  }
+
   /**
    * Diff the new graph against the previous state and return actions.
    */

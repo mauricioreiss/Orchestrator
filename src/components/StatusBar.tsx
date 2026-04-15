@@ -1,5 +1,6 @@
 import { memo } from "react";
 import { useSystemMetrics } from "../hooks/useSystemMetrics";
+import { useCanvasStore } from "../store/canvasStore";
 
 function formatBytes(bytes: number): string {
   const gb = bytes / (1024 * 1024 * 1024);
@@ -22,6 +23,7 @@ function ramColor(percent: number): string {
 
 function StatusBar() {
   const metrics = useSystemMetrics();
+  const saveStatus = useCanvasStore((s) => s.saveStatus);
   const cpu = metrics.cpu_usage;
   const ramPct = metrics.memory_percent;
 
@@ -110,8 +112,28 @@ function StatusBar() {
         </span>
       </div>
 
-      {/* Activity indicator */}
-      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+      <div className="w-px h-4" style={{ background: "var(--mx-border)" }} />
+
+      {/* Save status */}
+      <div className="flex items-center gap-1.5">
+        {saveStatus === "saving" ? (
+          <>
+            <svg width="12" height="12" viewBox="0 0 12 12" className="animate-spin" style={{ color: "#f59e0b" }}>
+              <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2" fill="none" strokeDasharray="14 14" strokeLinecap="round" />
+            </svg>
+            <span className="text-[10px]" style={{ color: "#f59e0b" }}>Saving...</span>
+          </>
+        ) : saveStatus === "saved" ? (
+          <>
+            <svg width="12" height="12" viewBox="0 0 12 12" style={{ color: "#10b981" }}>
+              <path d="M3 6l2.5 2.5L9 4" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span className="text-[10px]" style={{ color: "#10b981" }}>Saved</span>
+          </>
+        ) : (
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+        )}
+      </div>
     </div>
   );
 }
