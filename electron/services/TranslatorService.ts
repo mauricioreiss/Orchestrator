@@ -117,13 +117,23 @@ export class TranslatorService {
     const clean = sanitizeLlmCommand(rawCommand);
     log.info(`[orchestrated-space] Sanitized command: ${clean}`);
 
-    // 5. Smart Write — intercepts <<SEND_TO:...>> and routes to target PTYs
+    // 5. Guard: in orchestrator mode, reject responses without SEND_TO tags.
+    //    This prevents AI chatter/errors from being injected into terminals.
+    const hasSendTo = /<<SEND_TO:.+?>>/m.test(clean);
+    if (connectedNodes.length > 0 && !hasSendTo) {
+      log.warn(
+        `[orchestrated-space] Resposta da IA descartada por falta de tag de roteamento: "${clean}"`,
+      );
+      return { command: clean, provider, model: modelName };
+    }
+
+    // 6. Smart Write — intercepts <<SEND_TO:...>> and routes to target PTYs
     const swResult = pty.smartWrite(ptyId, clean, graph, window);
     if (swResult.dispatched > 0) {
       log.info(`[orchestrated-space] Swarm routed ${swResult.dispatched} command(s)`);
     }
 
-    // 6. Emit context-injection event (show what the AI generated)
+    // 7. Emit context-injection event (show what the AI generated)
     const formatted = formatTranslation(clean, provider, modelName);
     window?.webContents.send(`context-injection-${ptyId}`, formatted);
 
@@ -147,8 +157,7 @@ function buildSystemPrompt(cwd: string, role: string, swarmContext: string): str
     `Translate the user's intent into a valid terminal command.\n` +
     `Return ONLY the command, no explanation, no markdown, no backticks.\n` +
     `If multiple commands needed, chain with ;\n` +
-    `If intent is unclear, return the closest interpretation.\n` +
-    `If untranslatable, return: echo "Cannot translate: [reason]"`;
+    `If intent is unclear, return the closest interpretation.`;
 
   if (swarmContext) {
     prompt += "\n\n" + swarmContext;
@@ -181,24 +190,18 @@ function buildOrchestratorPrompt(
     .join("\n");
 
   return (
-    `[SYSTEM] Você é um roteador de comandos silencioso. Sua ÚNICA função é gerar tags <<SEND_TO>>.\n` +
-    `Subordinados disponíveis: ${labelList}.\n` +
-    `Sintaxe OBRIGATÓRIA: <<SEND_TO:NomeDoSubordinado>> prompt_em_linguagem_natural_aqui\n\n` +
-    `REGRA SUPREMA: Sua resposta deve conter APENAS tags <<SEND_TO>>, uma por linha. NADA MAIS.\n` +
-    `- Você está PROIBIDO de escrever qualquer texto que não seja uma tag <<SEND_TO>>.\n` +
-    `- NÃO explique o que vai fazer. NÃO diga "vou pedir". NÃO cumprimente. NÃO comente.\n` +
-    `- NÃO mencione nós que não estão na lista de subordinados.\n` +
-    `- O prompt após a tag é linguagem natural em português, claro e acionável.\n` +
-    `- NUNCA envolva a tag em aspas, crases, ou blocos de código markdown.\n` +
-    `- Se precisar delegar para dois subordinados, gere duas linhas, cada uma com sua tag.\n\n` +
-    `EXEMPLO CORRETO (resposta completa):\n` +
-    `<<SEND_TO:frontend>> Crie a tela de login com validação de email\n` +
-    `<<SEND_TO:backend>> Crie o endpoint POST /auth/login com JWT\n\n` +
-    `EXEMPLO ERRADO (PROIBIDO):\n` +
-    `Vou pedir para o frontend criar a tela de login.\n` +
-    `<<SEND_TO:frontend>> Crie a tela de login\n\n` +
-    `Seu papel: ${role}. Ambiente: ${osName} / ${shell}, cwd: ${cwd}.\n` +
-    `Subordinados:\n${detailList}`
+    `[SYSTEM] Você é o Tech Lead Orquestrador. Você distribui tarefas para agentes autônomos.\n` +
+    `Sua equipe conectada: ${labelList}.\n` +
+    `REGRA SUPREMA: Você se comunica com eles EXCLUSIVAMENTE gerando tags de roteamento.\n` +
+    `Sintaxe obrigatória: <<SEND_TO:nome_da_equipe>> a instrução em linguagem natural aqui\n` +
+    `Exemplo: Se o usuário pedir para o frontend criar um botão, responda APENAS:\n` +
+    `<<SEND_TO:frontend>> Crie um componente de botão azul.\n\n` +
+    `NUNCA explique o que está fazendo. NUNCA gere texto fora das tags.\n` +
+    `NUNCA envolva as tags em aspas, crases ou blocos de código.\n` +
+    `Se precisar delegar para múltiplos agentes, gere múltiplas tags, uma por linha.\n` +
+    `Os nomes dos agentes são EXATAMENTE: ${labelList}. Use esses nomes exatos nas tags.\n\n` +
+    `Ambiente: ${osName} / ${shell}, cwd: ${cwd}. Papel: ${role}.\n` +
+    `Detalhes da equipe:\n${detailList}`
   );
 }
 

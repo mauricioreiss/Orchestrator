@@ -4,7 +4,7 @@ import {
   useReactFlow,
   type NodeProps,
 } from "@xyflow/react";
-import type { NoteNodeData, TerminalNodeData } from "../../types";
+import type { NoteNodeData, TerminalNodeData, ConnectedNodeInfo } from "../../types";
 import { isElectron } from "../../lib/electron";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
@@ -137,14 +137,31 @@ function NoteNode({ id, data, selected }: NodeProps) {
       return;
     }
 
+    // Build subordinate list from the NOTE's perspective — the note is the
+    // hub that sees all terminals. Exclude the orchestrator itself (it's the
+    // one receiving the AI response, not a subordinate).
+    const subordinates: ConnectedNodeInfo[] = targets
+      .filter((n) => n.type === "terminal" && n.id !== orchestrator.id)
+      .map((n) => {
+        const d = n.data as TerminalNodeData;
+        return {
+          label: d.label ?? "Terminal",
+          type: "terminal",
+          cwd: d.cwd,
+          ptyId: d.ptyId,
+        };
+      })
+      .filter((info) => !!info.ptyId);
+
+    console.log("[NoteNode] 3b. Subordinados montados:", subordinates.map((s) => s.label));
+
     setExecStatus("sending");
     setExecError(null);
     setEdgeStatus("translating");
 
-    // Route through the translator: it snapshots Zustand state, builds a
-    // fresh connectedNodes array from the orchestrator's outgoing edges,
-    // and hands everything to the backend orchestrator prompt.
-    console.log(`[NoteNode] 4. Chamando translate_and_inject -> orquestrador ${orchestrator.id} (pty ${termData.ptyId})`);
+    // Pass subordinates directly — no need for useTranslator to rediscover
+    // from the orchestrator's edges (the note is the hub, not the orchestrator).
+    console.log(`[NoteNode] 4. Chamando translate_and_inject -> orquestrador ${orchestrator.id} (pty ${termData.ptyId}), subordinados: ${subordinates.length}`);
     try {
       const result = await translate(
         trimmed,
@@ -152,6 +169,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
         termData.cwd ?? "",
         termData.role ?? "Agent",
         orchestrator.id,
+        subordinates,
       );
 
       if (result) {

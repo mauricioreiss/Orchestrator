@@ -15,9 +15,10 @@ interface UseTranslatorReturn {
   lastCommand: string | null;
   error: string | null;
   /**
-   * `orchestratorNodeId` is the React Flow node id of the node that will
-   * act as the orchestrator (typically the terminal receiving the note).
-   * Outgoing edges from this node define the subordinates visible to the AI.
+   * `orchestratorNodeId` is the React Flow node id of the terminal that will
+   * act as the orchestrator (receives the AI response).
+   * `subordinates` is the pre-built list of terminals the AI can SEND_TO.
+   * When provided, edge-walking is skipped (the caller already resolved them).
    */
   translate: (
     noteContent: string,
@@ -25,6 +26,7 @@ interface UseTranslatorReturn {
     cwd: string,
     role: string,
     orchestratorNodeId: string,
+    subordinates?: ConnectedNodeInfo[],
   ) => Promise<TranslateResult | null>;
 }
 
@@ -67,6 +69,7 @@ export function useTranslator(): UseTranslatorReturn {
       cwd: string,
       role: string,
       orchestratorNodeId: string,
+      subordinates?: ConnectedNodeInfo[],
     ): Promise<TranslateResult | null> => {
       if (!isElectron()) return null;
       if (!noteContent.trim()) {
@@ -75,27 +78,28 @@ export function useTranslator(): UseTranslatorReturn {
         return null;
       }
 
-      // Snapshot Zustand state NOW — no subscription, no staleness.
-      const { nodes, edges } = useCanvasStore.getState();
-
-      // Bidirectional: any edge touching the orchestrator defines a subordinate,
-      // regardless of draw direction. Skip the note itself (it's the caller).
-      const connectedNodes: ConnectedNodeInfo[] = [];
-      const seen = new Set<string>();
-      for (const edge of edges) {
-        let neighborId: string | null = null;
-        if (edge.source === orchestratorNodeId) neighborId = edge.target;
-        else if (edge.target === orchestratorNodeId) neighborId = edge.source;
-        if (!neighborId) continue;
-        if (seen.has(neighborId)) continue;
-        seen.add(neighborId);
-        const neighborNode = nodes.find((n) => n.id === neighborId);
-        if (!neighborNode) continue;
-        // Only expose terminals with a live ptyId — the AI can only SEND_TO
-        // terminals running interactive CLIs. Skip notes, vscode, browser, etc.
-        if (neighborNode.type !== "terminal") continue;
-        const info = toConnectedNodeInfo(neighborNode);
-        if (info && info.ptyId) connectedNodes.push(info);
+      // Use pre-built subordinate list when provided (NoteNode is the hub and
+      // already resolved the full list). Fall back to edge-walking only when
+      // the caller didn't provide subordinates.
+      let connectedNodes: ConnectedNodeInfo[];
+      if (subordinates && subordinates.length > 0) {
+        connectedNodes = subordinates;
+      } else {
+        const { nodes, edges } = useCanvasStore.getState();
+        connectedNodes = [];
+        const seen = new Set<string>();
+        for (const edge of edges) {
+          let neighborId: string | null = null;
+          if (edge.source === orchestratorNodeId) neighborId = edge.target;
+          else if (edge.target === orchestratorNodeId) neighborId = edge.source;
+          if (!neighborId) continue;
+          if (seen.has(neighborId)) continue;
+          seen.add(neighborId);
+          const neighborNode = nodes.find((n) => n.id === neighborId);
+          if (!neighborNode || neighborNode.type !== "terminal") continue;
+          const info = toConnectedNodeInfo(neighborNode);
+          if (info && info.ptyId) connectedNodes.push(info);
+        }
       }
 
       setStatus("translating");
