@@ -17,7 +17,12 @@ import { useShallow } from "zustand/react/shallow";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#10b981";
-const HANDLES = [{ type: "source" as const, position: Position.Right, color: "#10b981" }];
+const HANDLES = [
+  { id: "top", type: "target" as const, position: Position.Top, color: "#10b981" },
+  { id: "bottom", type: "source" as const, position: Position.Bottom, color: "#10b981" },
+  { id: "left", type: "target" as const, position: Position.Left, color: "#10b981" },
+  { id: "right", type: "source" as const, position: Position.Right, color: "#10b981" },
+];
 
 const PRIORITY_COLORS: Record<string, string> = {
   green: "#10b981",

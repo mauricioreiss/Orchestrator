@@ -76,16 +76,16 @@ export default function BootScreen({ open: isOpen, onClose }: BootScreenProps) {
           {/* Brand */}
           <div className="flex flex-col items-center gap-2">
             <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center text-2xl font-bold"
-              style={{ background: "var(--mx-accent)", color: "#ffffff" }}
+              className="w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-bold"
+              style={{ background: "linear-gradient(135deg, #A855F7, #22D3EE)", color: "#ffffff" }}
             >
-              M
+              OS
             </div>
             <h1 className="text-2xl font-bold" style={{ color: "var(--mx-text)" }}>
-              Maestri-X
+              Orchestrated Space
             </h1>
             <p className="text-sm" style={{ color: "var(--mx-text-secondary)" }}>
-              Terminal Orchestration Canvas
+              Sinapse de Dados
             </p>
           </div>
 

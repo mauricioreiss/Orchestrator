@@ -7,7 +7,12 @@ import { useShallow } from "zustand/react/shallow";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#0ea5e9";
-const HANDLES = [{ type: "source" as const, position: Position.Right, color: "#0ea5e9" }];
+const HANDLES = [
+  { id: "top", type: "target" as const, position: Position.Top, color: "#0ea5e9" },
+  { id: "bottom", type: "source" as const, position: Position.Bottom, color: "#0ea5e9" },
+  { id: "left", type: "target" as const, position: Position.Left, color: "#0ea5e9" },
+  { id: "right", type: "source" as const, position: Position.Right, color: "#0ea5e9" },
+];
 
 interface QueryResult {
   columns: string[];

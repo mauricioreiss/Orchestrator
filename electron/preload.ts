@@ -3,7 +3,7 @@ import log from "./log";
 
 const ALLOWED_INVOKE_CHANNELS = [
   "ping",
-  "spawn_pty", "write_pty", "resize_pty", "kill_pty", "list_ptys", "read_pty_output", "pipe_pty_output",
+  "spawn_pty", "write_pty", "resize_pty", "kill_pty", "list_ptys", "read_pty_output", "pipe_pty_output", "swarm_write",
   "detect_code_server", "start_code_server", "stop_code_server", "code_server_status", "list_code_servers",
   "sync_canvas", "send_interrupt",
   "cleanup_nodes",
@@ -14,12 +14,13 @@ const ALLOWED_INVOKE_CHANNELS = [
   "start_proxy", "stop_proxy", "list_proxies",
   "get_system_metrics",
   "approve_agent_action", "reject_agent_action",
+  "fs_read_directory", "fs_read_file",
   "dialog:open",
 ] as const;
 
 type AllowedChannel = typeof ALLOWED_INVOKE_CHANNELS[number];
 
-const ALLOWED_EVENT_PREFIXES = ["pty-output-", "pty-exit-", "context-injection-", "pty-broadcast", "agent-approval"];
+const ALLOWED_EVENT_PREFIXES = ["pty-output-", "pty-exit-", "context-injection-", "pty-broadcast", "agent-approval", "swarm-dispatch"];
 
 contextBridge.exposeInMainWorld("maestriAPI", {
   invoke: (channel: string, args?: Record<string, unknown>) => {

@@ -5,6 +5,9 @@ import { useCanvasSync } from "../../hooks/useCanvasSync";
 import NodeFullscreen from "./NodeFullscreen";
 
 interface HandleConfig {
+  /** Unique id within the node. Required when a node has multiple handles
+   * of the same type so React Flow can resolve clicks unambiguously. */
+  id: string;
   type: "source" | "target";
   position: Position;
   color?: string;
@@ -113,7 +116,7 @@ function NodeWrapperInner({
       />
 
       <div
-        className="flex flex-col h-full rounded-lg overflow-hidden"
+        className="flex flex-col h-full rounded-lg"
         style={{
           border: `1px solid ${selected ? activeBorder : "var(--mx-glass-border)"}`,
           background: "var(--mx-glass-bg)",
@@ -218,7 +221,7 @@ function NodeWrapperInner({
         </div>
 
         {/* Content area */}
-        <div className="flex-1 min-h-0 flex flex-col">{children}</div>
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden rounded-b-lg">{children}</div>
 
         {/* Status bar */}
         {showStatusBar && (
@@ -239,16 +242,19 @@ function NodeWrapperInner({
         )}
       </div>
 
-      {/* Handles */}
-      {handles?.map((h, i) => (
+      {/* Handles — unique id required for reliable hit resolution when a
+          node has multiple handles of the same type. */}
+      {handles?.map((h) => (
         <Handle
-          key={`${h.type}-${h.position}-${i}`}
+          key={h.id}
+          id={h.id}
           type={h.type}
           position={h.position}
-          className="!w-3 !h-3 !border-2"
+          className="!w-4 !h-4 !border-2 mx-handle pointer-events-auto"
           style={{
             backgroundColor: h.color ?? borderColor,
             borderColor: "var(--mx-bg)",
+            zIndex: 50,
           }}
         />
       ))}

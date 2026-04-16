@@ -22,7 +22,7 @@ export default class NodeErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error(
-      `[Maestri-X] Node ${this.props.nodeId} crashed:`,
+      `[Orchestrated-Space] Node ${this.props.nodeId} crashed:`,
       error,
       info.componentStack,
     );

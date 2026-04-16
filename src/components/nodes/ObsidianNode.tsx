@@ -7,7 +7,12 @@ import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#a855f7";
 const PATH_DEBOUNCE_MS = 500;
-const HANDLES = [{ type: "source" as const, position: Position.Right, color: "#a855f7" }];
+const HANDLES = [
+  { id: "top", type: "target" as const, position: Position.Top, color: "#a855f7" },
+  { id: "bottom", type: "source" as const, position: Position.Bottom, color: "#a855f7" },
+  { id: "left", type: "target" as const, position: Position.Left, color: "#a855f7" },
+  { id: "right", type: "source" as const, position: Position.Right, color: "#a855f7" },
+];
 
 function ObsidianNode({ id, data, selected }: NodeProps) {
   const nodeData = data as ObsidianNodeData;

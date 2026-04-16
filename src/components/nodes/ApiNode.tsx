@@ -7,7 +7,12 @@ import { useShallow } from "zustand/react/shallow";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#f97316";
-const HANDLES = [{ type: "source" as const, position: Position.Right, color: "#f97316" }];
+const HANDLES = [
+  { id: "top", type: "target" as const, position: Position.Top, color: "#f97316" },
+  { id: "bottom", type: "source" as const, position: Position.Bottom, color: "#f97316" },
+  { id: "left", type: "target" as const, position: Position.Left, color: "#f97316" },
+  { id: "right", type: "source" as const, position: Position.Right, color: "#f97316" },
+];
 const METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH"] as const;
 const METHOD_COLORS: Record<string, string> = {
   GET: "#10b981",

@@ -1,5 +1,5 @@
-appId: com.maestrix.app
-productName: Maestri-X
+appId: com.orchestratedspace.app
+productName: Orchestrated Space
 directories:
   output: release
   buildResources: build

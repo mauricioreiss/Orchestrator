@@ -11,6 +11,7 @@ import { VaultService } from "./services/VaultService";
 import { SupervisorService } from "./services/SupervisorService";
 import { TranslatorService } from "./services/TranslatorService";
 import { MonitorService } from "./services/MonitorService";
+import { FileSystemService } from "./services/FileSystemService";
 import { registerIpcHandlers } from "./ipc/handlers";
 
 // Force English locale so VS Code Web doesn't try to load missing pt-BR NLS bundles
@@ -28,6 +29,7 @@ let vaultService: VaultService;
 let supervisorService: SupervisorService;
 let translatorService: TranslatorService;
 let monitorService: MonitorService;
+let fileSystemService: FileSystemService;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -79,6 +81,7 @@ function initServices(): void {
   vaultService = new VaultService();
   translatorService = new TranslatorService();
   monitorService = new MonitorService();
+  fileSystemService = new FileSystemService();
 
   // PtyService needs window reference for webContents.send
   // Will be set after window creation
@@ -123,6 +126,7 @@ app.whenReady().then(() => {
     translator: translatorService,
     proxy: proxyService,
     monitor: monitorService,
+    fileSystem: fileSystemService,
     getWindow: () => mainWindow,
   });
 
@@ -162,7 +166,7 @@ function killAllChildProcesses(): void {
 
   if (remainingPids.size === 0) return;
 
-  log.info(`[maestri-x] Final sweep: killing ${remainingPids.size} remaining PIDs`);
+  log.info(`[orchestrated-space] Final sweep: killing ${remainingPids.size} remaining PIDs`);
   for (const pid of remainingPids) {
     try {
       if (process.platform === "win32") {
@@ -173,7 +177,7 @@ function killAllChildProcesses(): void {
       } else {
         process.kill(pid, "SIGKILL");
       }
-      log.info(`[maestri-x] Swept PID ${pid}`);
+      log.info(`[orchestrated-space] Swept PID ${pid}`);
     } catch {
       // Already dead, ignore
     }
@@ -191,7 +195,15 @@ app.on("window-all-closed", () => {
   }
 });
 
-// Prevent non-critical native addon errors (conpty_console_list) from crashing the app
+// Prevent non-critical native addon errors from crashing the app.
+// node-pty's conpty_console_list_agent.js throws AttachConsole errors on Windows
+// that are harmless but would kill the main process if unhandled.
 process.on("uncaughtException", (err) => {
-  log.error("[Maestri-X] uncaught exception:", err.message);
+  if (
+    err.message?.includes("AttachConsole failed") ||
+    err.stack?.includes("conpty_console_list_agent")
+  ) {
+    return; // Silently swallow known node-pty Windows noise
+  }
+  log.error("[orchestrated-space] uncaught exception:", err.message, err.stack);
 });

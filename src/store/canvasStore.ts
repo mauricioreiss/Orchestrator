@@ -40,15 +40,18 @@ interface CanvasStore {
 
   // Add node helpers
   addNode: (node: Node) => void;
-  addTerminalNode: () => void;
-  addNoteNode: () => void;
-  addVSCodeNode: () => void;
-  addObsidianNode: () => void;
-  addBrowserNode: () => void;
-  addKanbanNode: () => void;
-  addApiNode: () => void;
-  addDbNode: () => void;
-  addGroupNode: () => void;
+  addTerminalNode: (position?: { x: number; y: number }) => void;
+  addNoteNode: (position?: { x: number; y: number }) => void;
+  addVSCodeNode: (position?: { x: number; y: number }) => void;
+  addObsidianNode: (position?: { x: number; y: number }) => void;
+  addBrowserNode: (position?: { x: number; y: number }) => void;
+  addKanbanNode: (position?: { x: number; y: number }) => void;
+  addApiNode: (position?: { x: number; y: number }) => void;
+  addDbNode: (position?: { x: number; y: number }) => void;
+  addGroupNode: (position?: { x: number; y: number }) => void;
+  addWorkspaceNode: (position?: { x: number; y: number }) => void;
+  addMarkdownNode: (position?: { x: number; y: number }) => void;
+  addMonacoNode: (filePath: string, rootDir: string) => void;
 
   // Persistence
   save: () => Promise<void>;
@@ -109,7 +112,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     if (hasRemoval) scheduleSave();
   },
 
-  onConnect: (connection, stroke = "#7c3aed") => {
+  onConnect: (connection, stroke = "#A855F7") => {
     set({
       edges: addEdge(
         { ...connection, animated: true, style: { stroke } },
@@ -149,67 +152,67 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     scheduleSave();
   },
 
-  addTerminalNode: () => {
+  addTerminalNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "terminal").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "terminal",
-      position: { x: 100 + Math.random() * 600, y: 100 + Math.random() * 400 },
+      position: position ?? { x: 100 + Math.random() * 600, y: 100 + Math.random() * 400 },
       data: { type: "terminal", label: `Terminal ${count}`, role: "Agent" },
       style: { width: 520, height: 360 },
     });
   },
 
-  addNoteNode: () => {
+  addNoteNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "note").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "note",
-      position: { x: 50 + Math.random() * 400, y: 50 + Math.random() * 300 },
+      position: position ?? { x: 50 + Math.random() * 400, y: 50 + Math.random() * 300 },
       data: { type: "note", label: `Note ${count}`, content: "", priority: 1, commandMode: false },
       style: { width: 350, height: 250 },
     });
   },
 
-  addVSCodeNode: () => {
+  addVSCodeNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "vscode").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "vscode",
-      position: { x: 50 + Math.random() * 300, y: 50 + Math.random() * 200 },
+      position: position ?? { x: 50 + Math.random() * 300, y: 50 + Math.random() * 200 },
       data: { type: "vscode", label: `VS Code ${count}`, workspacePath: "" },
       style: { width: 700, height: 500 },
     });
   },
 
-  addObsidianNode: () => {
+  addObsidianNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "obsidian").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "obsidian",
-      position: { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
       data: { type: "obsidian", label: `Vault ${count}`, vaultPath: "" },
       style: { width: 380, height: 400 },
     });
   },
 
-  addBrowserNode: () => {
+  addBrowserNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "browser").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "browser",
-      position: { x: 60 + Math.random() * 400, y: 60 + Math.random() * 300 },
+      position: position ?? { x: 60 + Math.random() * 400, y: 60 + Math.random() * 300 },
       data: { type: "browser", label: `Browser ${count}`, url: "" },
       style: { width: 800, height: 600 },
     });
   },
 
-  addKanbanNode: () => {
+  addKanbanNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "kanban").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "kanban",
-      position: { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
       data: {
         type: "kanban",
         label: `Kanban ${count}`,
@@ -223,12 +226,12 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     });
   },
 
-  addApiNode: () => {
+  addApiNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "api").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "api",
-      position: { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
       data: {
         type: "api",
         label: `API ${count}`,
@@ -241,12 +244,12 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     });
   },
 
-  addDbNode: () => {
+  addDbNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "db").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "db",
-      position: { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
       data: {
         type: "db",
         label: `Database ${count}`,
@@ -256,14 +259,56 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     });
   },
 
-  addGroupNode: () => {
+  addGroupNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "group").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "group",
-      position: { x: 50 + Math.random() * 200, y: 50 + Math.random() * 200 },
+      position: position ?? { x: 50 + Math.random() * 200, y: 50 + Math.random() * 200 },
       data: { type: "group", label: `Project ${count}`, color: "#3b82f6" },
       style: { width: 1200, height: 800, zIndex: -1 },
+    });
+  },
+
+  addWorkspaceNode: (position?) => {
+    const count = get().nodes.filter((n) => n.type === "workspace").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "workspace",
+      position: position ?? { x: 100 + Math.random() * 400, y: 100 + Math.random() * 300 },
+      data: { type: "workspace", label: `Workspace ${count}`, path: "" },
+      style: { width: 900, height: 600 },
+    });
+  },
+
+  addMarkdownNode: (position?) => {
+    const count = get().nodes.filter((n) => n.type === "markdown").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "markdown",
+      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      data: { type: "markdown", label: `Markdown ${count}`, content: "" },
+      style: { width: 500, height: 400 },
+    });
+  },
+
+  addMonacoNode: (filePath: string, rootDir: string) => {
+    const fileName = filePath.split(/[\\/]/).pop() ?? "untitled";
+    const ext = fileName.includes(".") ? (fileName.split(".").pop()?.toLowerCase() ?? "") : "";
+    const langMap: Record<string, string> = {
+      ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
+      py: "python", rs: "rust", go: "go", json: "json", md: "markdown",
+      css: "css", html: "html", yaml: "yaml", yml: "yaml", sql: "sql",
+      sh: "shell", xml: "xml", java: "java", c: "c", cpp: "cpp", cs: "csharp",
+      rb: "ruby", php: "php", swift: "swift", lua: "lua",
+    };
+    const language = langMap[ext] ?? "plaintext";
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "monaco",
+      position: { x: 200 + Math.random() * 400, y: 100 + Math.random() * 300 },
+      data: { type: "monaco", label: fileName, filePath, rootDir, language },
+      style: { width: 600, height: 450 },
     });
   },
 

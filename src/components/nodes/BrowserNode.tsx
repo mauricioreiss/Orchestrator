@@ -9,8 +9,10 @@ import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#f43f5e";
 const HANDLES = [
-  { type: "target" as const, position: Position.Left, color: "#f43f5e" },
-  { type: "source" as const, position: Position.Right, color: "#f43f5e" },
+  { id: "top", type: "target" as const, position: Position.Top, color: "#f43f5e" },
+  { id: "bottom", type: "source" as const, position: Position.Bottom, color: "#f43f5e" },
+  { id: "left", type: "target" as const, position: Position.Left, color: "#f43f5e" },
+  { id: "right", type: "source" as const, position: Position.Right, color: "#f43f5e" },
 ];
 
 /** Normalize raw user input into a valid URL. Returns null only for empty input. */

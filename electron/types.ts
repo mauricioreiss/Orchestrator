@@ -82,6 +82,18 @@ export interface TranslateResult {
   model: string;
 }
 
+/**
+ * Snapshot of a node that the orchestrator can command. Built on the
+ * frontend from fresh Zustand state at the moment of the IPC call, so the
+ * AI always sees the current graph (no staleness from debounced sync).
+ */
+export interface ConnectedNodeInfo {
+  label: string;
+  type: string;
+  cwd?: string;
+  ptyId?: string;
+}
+
 export interface CleanupResult {
   killed_ptys: number;
   stopped_servers: number;
@@ -128,4 +140,19 @@ export interface RemovedNode {
   node_id: string;
   node_type: string;
   process_id?: string;
+}
+
+// File system types (FileSystemService)
+export interface FsEntry {
+  name: string;
+  relative_path: string;
+  size: number;
+  is_dir: boolean;
+}
+
+export interface FsFileContent {
+  relative_path: string;
+  content: string;
+  size: number;
+  language: string;
 }

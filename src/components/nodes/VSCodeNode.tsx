@@ -10,7 +10,12 @@ import { useShallow } from "zustand/react/shallow";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#06b6d4";
-const HANDLES = [{ type: "source" as const, position: Position.Right, color: "#06b6d4" }];
+const HANDLES = [
+  { id: "top", type: "target" as const, position: Position.Top, color: "#06b6d4" },
+  { id: "bottom", type: "source" as const, position: Position.Bottom, color: "#06b6d4" },
+  { id: "left", type: "target" as const, position: Position.Left, color: "#06b6d4" },
+  { id: "right", type: "source" as const, position: Position.Right, color: "#06b6d4" },
+];
 
 function VSCodeNode({ id, data, selected, parentId }: NodeProps) {
   const nodeData = data as VSCodeNodeData;
@@ -110,7 +115,7 @@ function VSCodeNode({ id, data, selected, parentId }: NodeProps) {
           </svg>
           <p className="text-sm text-center" style={{ color: "var(--mx-text-secondary)" }}>Ambiente Web detectado</p>
           <p className="text-[11px] text-center leading-relaxed max-w-[280px]" style={{ color: "var(--mx-text-muted)" }}>
-            Use a versao Desktop do Maestri-X para embeds do VS Code.
+            Use a versao Desktop do Orchestrated Space para embeds do VS Code.
           </p>
         </div>
       </NodeWrapper>

@@ -8,8 +8,9 @@ import type { SupervisorService } from "../services/SupervisorService";
 import type { TranslatorService } from "../services/TranslatorService";
 import type { ProxyService } from "../services/ProxyService";
 import type { MonitorService } from "../services/MonitorService";
+import type { FileSystemService } from "../services/FileSystemService";
 import log from "../log";
-import type { CanvasGraph, ContextAction, SyncResult } from "../types";
+import type { CanvasGraph, ContextAction, SyncResult, ConnectedNodeInfo } from "../types";
 
 interface Services {
   pty: PtyService;
@@ -21,6 +22,7 @@ interface Services {
   translator: TranslatorService;
   proxy: ProxyService;
   monitor: MonitorService;
+  fileSystem: FileSystemService;
   getWindow: () => BrowserWindow | null;
 }
 
@@ -82,7 +84,7 @@ function executeContextActions(
 }
 
 export function registerIpcHandlers(services: Services): void {
-  const { pty, codeServer, context, persistence, vault, supervisor, translator, proxy, monitor, getWindow } = services;
+  const { pty, codeServer, context, persistence, vault, supervisor, translator, proxy, monitor, fileSystem, getWindow } = services;
 
   // Utility
   ipcMain.handle("ping", () => "pong");
@@ -174,9 +176,41 @@ export function registerIpcHandlers(services: Services): void {
   ipcMain.handle("get_all_settings", () => persistence.getAllSettings());
 
   // === Translator (1) ===
-  ipcMain.handle("translate_and_inject", async (_e, args: { noteContent: string; ptyId: string; cwd: string; role: string }) =>
-    translator.translateAndInject(args.noteContent, args.ptyId, args.cwd, args.role, persistence, pty, getWindow()),
+  ipcMain.handle(
+    "translate_and_inject",
+    async (
+      _e,
+      args: {
+        noteContent: string;
+        ptyId: string;
+        cwd: string;
+        role: string;
+        connectedNodes?: ConnectedNodeInfo[];
+      },
+    ) => {
+      log.info(
+        `[Backend] Recebido pedido de IA do NoteNode: ptyId=${args.ptyId}, connectedNodes=${(args.connectedNodes ?? []).length}`,
+      );
+      return translator.translateAndInject(
+        args.noteContent,
+        args.ptyId,
+        args.cwd,
+        args.role,
+        args.connectedNodes ?? [],
+        persistence,
+        pty,
+        context,
+        getWindow(),
+      );
+    },
   );
+
+  // === Swarm Write (1) ===
+  // Frontend calls this instead of write_pty when content may contain <<SEND_TO:...>> tags.
+  ipcMain.handle("swarm_write", (_e, args: { ptyId: string; text: string }) => {
+    const graph = context.getLastGraph();
+    return pty.smartWrite(args.ptyId, args.text, graph, getWindow());
+  });
 
   // === Proxy (3) ===
   ipcMain.handle("start_proxy", (_e, args: { instanceId: string; targetPort: number }) =>
@@ -190,6 +224,14 @@ export function registerIpcHandlers(services: Services): void {
   // === Monitoring (1) ===
   ipcMain.handle("get_system_metrics", () =>
     monitor.getMetrics(pty.count(), codeServer.count()),
+  );
+
+  // === File System (2) ===
+  ipcMain.handle("fs_read_directory", (_e, args: { rootDir: string; subfolder?: string }) =>
+    fileSystem.readDirectory(args.rootDir, args.subfolder),
+  );
+  ipcMain.handle("fs_read_file", (_e, args: { rootDir: string; relativePath: string }) =>
+    fileSystem.readFile(args.rootDir, args.relativePath),
   );
 
   // === HITL (Human-in-the-Loop) (2) ===
@@ -247,6 +289,14 @@ export function registerIpcHandlers(services: Services): void {
         command,
       });
     }
+  });
+
+  // === Swarm Dispatch Handler ===
+  // When PtyService detects <<SEND_TO:...>> in PTY output, route to target terminal.
+  pty.setDispatchHandler((sourcePtyId, targetLabel, command) => {
+    const graph = context.getLastGraph();
+    if (!graph) return;
+    pty.routeToTarget(sourcePtyId, targetLabel, command, graph, getWindow());
   });
 
   // === Approval Handler ===

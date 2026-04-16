@@ -114,7 +114,7 @@ export class CodeServerService {
     const ws = workspace ?? "";
 
     log.info(
-      `[maestri-x] Starting VS Code server ${instanceId} on port ${port}`,
+      `[orchestrated-space] Starting VS Code server ${instanceId} on port ${port}`,
     );
 
     // Strategy: try Code.exe directly (stays alive), then .cmd fallback
@@ -138,7 +138,7 @@ export class CodeServerService {
             "code.cmd",
           );
           if (fs.existsSync(fallback)) {
-            log.info(`[maestri-x] Trying fallback: ${fallback}`);
+            log.info(`[orchestrated-space] Trying fallback: ${fallback}`);
             child = this.spawnServeWeb(fallback, port, ws);
           }
         }
@@ -177,7 +177,7 @@ export class CodeServerService {
         setTimeout(() => {
           if (this.tcpCheck(port)) {
             log.info(
-              `[maestri-x] VS Code launcher exited (code 0) but server alive on port ${port} -- TCP-only tracking`,
+              `[orchestrated-space] VS Code launcher exited (code 0) but server alive on port ${port} -- TCP-only tracking`,
             );
             instance.launcherExited = true;
           }
@@ -221,11 +221,15 @@ export class CodeServerService {
   // -----------------------------------------------------------------------
 
   stopAll(): void {
-    for (const [, inst] of this.instances) {
-      if (inst.launcherExited) {
-        this.killByPort(inst.port);
-      } else {
-        this.killProcessTree(inst);
+    for (const [id, inst] of this.instances) {
+      try {
+        if (inst.launcherExited) {
+          this.killByPort(inst.port);
+        } else {
+          this.killProcessTree(inst);
+        }
+      } catch (e) {
+        log.warn(`[orchestrated-space] stopAll: failed to stop ${id}: ${e}`);
       }
     }
     this.instances.clear();
@@ -271,7 +275,7 @@ export class CodeServerService {
       const workspace = inst.workspace;
       this.instances.delete(instanceId);
       log.info(
-        `[maestri-x] Detached VS Code server ${instanceId} is no longer reachable`,
+        `[orchestrated-space] Detached VS Code server ${instanceId} is no longer reachable`,
       );
       return {
         instance_id: instanceId,
@@ -317,7 +321,7 @@ export class CodeServerService {
 
       this.instances.delete(instanceId);
       log.info(
-        `[maestri-x] VS Code server ${instanceId} died (port ${inst.port}): ${errorMsg}`,
+        `[orchestrated-space] VS Code server ${instanceId} died (port ${inst.port}): ${errorMsg}`,
       );
 
       return {
@@ -420,11 +424,11 @@ export class CodeServerService {
     const cliJs = this.findCliJs(vscodeRoot);
 
     if (!fs.existsSync(codeExe)) {
-      log.info(`[maestri-x] Code.exe not found at ${codeExe}`);
+      log.info(`[orchestrated-space] Code.exe not found at ${codeExe}`);
       return null;
     }
     if (!cliJs) {
-      log.info(`[maestri-x] cli.js not found in ${vscodeRoot}`);
+      log.info(`[orchestrated-space] cli.js not found in ${vscodeRoot}`);
       return null;
     }
 
@@ -434,7 +438,7 @@ export class CodeServerService {
     );
 
     log.info(
-      `[maestri-x] spawn Code.exe directly: ELECTRON_RUN_AS_NODE=1 "${codeExe}" "${cliJs}" serve-web --host 127.0.0.1 --port ${port}`,
+      `[orchestrated-space] spawn Code.exe directly: ELECTRON_RUN_AS_NODE=1 "${codeExe}" "${cliJs}" serve-web --host 127.0.0.1 --port ${port}`,
     );
 
     try {
@@ -460,10 +464,10 @@ export class CodeServerService {
         },
       );
 
-      log.info(`[maestri-x] Code.exe spawned (PID: ${child.pid})`);
+      log.info(`[orchestrated-space] Code.exe spawned (PID: ${child.pid})`);
       return child;
     } catch (e) {
-      log.info(`[maestri-x] Code.exe spawn failed: ${e}`);
+      log.info(`[orchestrated-space] Code.exe spawn failed: ${e}`);
       return null;
     }
   }
@@ -496,7 +500,7 @@ export class CodeServerService {
     ];
 
     log.info(
-      `[maestri-x] spawn_serve_web (fallback): ${binary} ${args.join(" ")}`,
+      `[orchestrated-space] spawn_serve_web (fallback): ${binary} ${args.join(" ")}`,
     );
 
     try {
@@ -514,7 +518,7 @@ export class CodeServerService {
 
       return spawn(binary, args, opts);
     } catch (e) {
-      log.info(`[maestri-x] spawn_serve_web failed: ${e}`);
+      log.info(`[orchestrated-space] spawn_serve_web failed: ${e}`);
       return null;
     }
   }
@@ -558,15 +562,19 @@ export class CodeServerService {
       return;
     }
 
-    // tree-kill sends SIGKILL to entire process tree (cross-platform)
-    treeKill(pid, "SIGKILL", (err) => {
-      if (err) {
-        log.info(`[maestri-x] tree-kill failed for PID ${pid}: ${err.message}, trying port fallback`);
-        this.killByPort(inst.port);
-      } else {
-        log.info(`[maestri-x] tree-kill OK (PID ${pid})`);
-      }
-    });
+    try {
+      treeKill(pid, "SIGKILL", (err) => {
+        if (err) {
+          log.warn(`[orchestrated-space] tree-kill failed for PID ${pid}: ${err.message}, trying port fallback`);
+          try { this.killByPort(inst.port); } catch { /* ignore */ }
+        } else {
+          log.info(`[orchestrated-space] tree-kill OK (PID ${pid})`);
+        }
+      });
+    } catch (e) {
+      log.warn(`[orchestrated-space] tree-kill threw for PID ${pid}: ${e}, trying port fallback`);
+      try { this.killByPort(inst.port); } catch { /* ignore */ }
+    }
   }
 
   /** Collect all tracked PIDs for external cleanup (e.g. before-quit sweep). */
@@ -599,7 +607,7 @@ export class CodeServerService {
             const pidNum = parseInt(pid, 10);
             if (!isNaN(pidNum) && pidNum > 0) {
               log.info(
-                `[maestri-x] Killing detached server PID ${pidNum} on port ${port}`,
+                `[orchestrated-space] Killing detached server PID ${pidNum} on port ${port}`,
               );
               try {
                 execSync(`taskkill /F /PID ${pidNum}`, {
@@ -617,7 +625,7 @@ export class CodeServerService {
         // netstat failed
       }
       log.info(
-        `[maestri-x] No process found listening on port ${port}`,
+        `[orchestrated-space] No process found listening on port ${port}`,
       );
     } else {
       // Unix: fuser -k

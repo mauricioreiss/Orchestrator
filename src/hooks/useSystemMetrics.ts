@@ -27,7 +27,7 @@ export function useSystemMetrics() {
         const result = await invoke<SystemMetrics>("get_system_metrics");
         if (active) setMetrics(result);
       } catch (err) {
-        console.error("[maestri-x] get_system_metrics failed:", err);
+        console.error("[orchestrated-space] get_system_metrics failed:", err);
       }
     };
 

@@ -8,7 +8,11 @@ import BootScreen from "./components/BootScreen";
 import SettingsModal from "./components/SettingsModal";
 import { ThemeProvider, useTheme } from "./contexts/ThemeContext";
 import { useCanvasStore } from "./store/canvasStore";
+import { useAuthStore } from "./store/authStore";
 import { useApprovalListener } from "./hooks/useApprovalListener";
+import { useSwarmRouter } from "./hooks/useSwarmRouter";
+import LoginScreen from "./components/LoginScreen";
+import CommandPalette from "./components/CommandPalette";
 
 /** Renders Toaster with current theme from context. */
 function ThemedToaster() {
@@ -18,6 +22,7 @@ function ThemedToaster() {
       position="top-right"
       theme={theme}
       richColors
+      className="no-drag-region"
       toastOptions={{
         style: {
           background: "var(--mx-glass-bg)",
@@ -32,6 +37,7 @@ function ThemedToaster() {
 }
 
 export default function App() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [showBoot, setShowBoot] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [bridgeStatus, setBridgeStatus] = useState<"checking" | "ok" | "fail">("checking");
@@ -41,21 +47,24 @@ export default function App() {
   // HITL: listen for agent approval requests and show toasts
   useApprovalListener();
 
+  // Swarm: route <<SEND_TO:Label>> commands through the graph
+  useSwarmRouter();
+
   useEffect(() => {
     const electronDetected = isElectron();
-    console.log(`[maestri-x] isElectron() = ${electronDetected}`);
+    console.log(`[orchestrated-space] isElectron() = ${electronDetected}`);
     if (!electronDetected) {
-      console.warn("[maestri-x] No Electron bridge detected — running in browser mode");
+      console.warn("[orchestrated-space] No Electron bridge detected — running in browser mode");
       setBridgeStatus("fail");
       return;
     }
     invoke<string>("ping")
       .then((r) => {
-        console.log(`[maestri-x] Ping response: ${r} — IPC bridge is working`);
+        console.log(`[orchestrated-space] Ping response: ${r} — IPC bridge is working`);
         setBridgeStatus("ok");
       })
       .catch((e) => {
-        console.error("[maestri-x] Ping FAILED:", e);
+        console.error("[orchestrated-space] Ping FAILED:", e);
         setBridgeStatus("fail");
       });
   }, []);
@@ -66,9 +75,19 @@ export default function App() {
 
   const openSettings = useCallback(() => setShowSettings(true), []);
 
+  if (!isAuthenticated) {
+    return (
+      <ThemeProvider>
+        <div className="fixed top-0 left-0 w-full h-9 z-[9998] drag-region" />
+        <LoginScreen />
+      </ThemeProvider>
+    );
+  }
+
   return (
     <ThemeProvider>
       <ThemedToaster />
+      <div className="fixed top-0 left-0 w-full h-9 z-[9998] drag-region" />
       <ReactFlowProvider>
         <div className="flex w-full h-full" style={{ background: "var(--mx-bg)" }}>
           <Sidebar onOpenSettings={openSettings} />
@@ -76,6 +95,8 @@ export default function App() {
             <Canvas />
           </div>
         </div>
+
+        <CommandPalette onOpenSettings={openSettings} />
 
         <BootScreen
           open={showBoot}

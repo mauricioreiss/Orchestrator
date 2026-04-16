@@ -44,7 +44,7 @@ export function useCanvasSync() {
     } catch (err) {
       const msg = String(err);
       if (!msg.includes("not found")) {
-        console.error("[maestri-x] sync_canvas failed:", err);
+        console.error("[orchestrated-space] sync_canvas failed:", err);
       }
       return null;
     }

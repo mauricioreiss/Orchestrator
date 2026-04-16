@@ -4,11 +4,11 @@ import {
   useReactFlow,
   type NodeProps,
 } from "@xyflow/react";
-import { invoke } from "../../lib/electron";
 import type { NoteNodeData, TerminalNodeData } from "../../types";
 import { isElectron } from "../../lib/electron";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
+import { useTranslator } from "../../hooks/useTranslator";
 import NodeWrapper from "./NodeWrapper";
 
 const BORDER_COLOR = "#f59e0b";
@@ -28,6 +28,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
   const { setNodes, getNode, getEdges } = useReactFlow();
   const { syncDebounced } = useCanvasSync();
   const setEdges = useCanvasStore((s) => s.setEdges);
+  const { translate } = useTranslator();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Propagate content changes to React Flow node data (debounced)
@@ -70,7 +71,7 @@ function NoteNode({ id, data, selected }: NodeProps) {
     (edgeStatus: string) => {
       setEdges((eds) =>
         eds.map((e) =>
-          e.source === id
+          e.source === id || e.target === id
             ? { ...e, data: { ...e.data, status: edgeStatus } }
             : e,
         ),
@@ -80,38 +81,104 @@ function NoteNode({ id, data, selected }: NodeProps) {
   );
 
   const handleExecute = useCallback(async () => {
-    if (!isElectron()) return;
-    // getEdges() reads on-demand (no reactive subscription to all edges)
-    const noteEdge = getEdges().find((e) => e.source === id);
-    if (!noteEdge) return;
-    const targetNode = getNode(noteEdge.target);
-    if (!targetNode || targetNode.type !== "terminal") return;
-    const termData = targetNode.data as TerminalNodeData;
-    if (!termData.ptyId) return;
+    const trimmed = content.trim();
+    console.log("[NoteNode] 1. EXECUTE clicado. Texto:", trimmed);
+
+    if (trimmed.length === 0) {
+      console.warn("[NoteNode] Nota vazia, abortando.");
+      setExecStatus("error");
+      setExecError("Nota vazia");
+      setTimeout(() => { setExecStatus("idle"); setExecError(null); }, 2500);
+      return;
+    }
+
+    if (!isElectron()) {
+      console.warn("[NoteNode] Não está rodando em Electron — invoke indisponível.");
+      setExecStatus("error");
+      setExecError("Electron API indisponível");
+      setTimeout(() => { setExecStatus("idle"); setExecError(null); }, 2500);
+      return;
+    }
+
+    // Bidirectional: find ANY edge touching this note, regardless of draw direction.
+    const connected = getEdges().filter((e) => e.source === id || e.target === id);
+    console.log(`[NoteNode] 2. Arestas conectadas (bidirecional): ${connected.length}`, connected);
+
+    if (connected.length === 0) {
+      console.warn("[NoteNode] Nenhuma aresta conectada — conecte a nota a um terminal orquestrador.");
+      setExecStatus("error");
+      setExecError("Conecte a nota a um terminal");
+      setTimeout(() => { setExecStatus("idle"); setExecError(null); }, 2500);
+      return;
+    }
+
+    // Resolve neighbor nodes on the other side of each edge.
+    const targets = connected
+      .map((e) => getNode(e.source === id ? e.target : e.source))
+      .filter((n): n is NonNullable<typeof n> => !!n);
+    const orchestrator = targets.find((n) => n.type === "terminal");
+    console.log("[NoteNode] 3. Vizinhos resolvidos:", targets.map((n) => ({ id: n.id, type: n.type, label: (n.data as Record<string, unknown>).label })), "orquestrador:", orchestrator?.id);
+
+    if (!orchestrator) {
+      const types = targets.map((n) => n.type).join(", ") || "nenhum";
+      console.warn(`[NoteNode] Nenhum terminal entre os alvos. Tipos encontrados: ${types}`);
+      setExecStatus("error");
+      setExecError(`Alvo não é terminal (${types})`);
+      setTimeout(() => { setExecStatus("idle"); setExecError(null); }, 2500);
+      return;
+    }
+
+    const termData = orchestrator.data as TerminalNodeData;
+    if (!termData.ptyId) {
+      console.warn(`[NoteNode] Terminal ${orchestrator.id} ainda sem ptyId — aguarde o spawn.`);
+      setExecStatus("error");
+      setExecError("Terminal ainda iniciando");
+      setTimeout(() => { setExecStatus("idle"); setExecError(null); }, 2500);
+      return;
+    }
 
     setExecStatus("sending");
     setExecError(null);
     setEdgeStatus("translating");
 
+    // Route through the translator: it snapshots Zustand state, builds a
+    // fresh connectedNodes array from the orchestrator's outgoing edges,
+    // and hands everything to the backend orchestrator prompt.
+    console.log(`[NoteNode] 4. Chamando translate_and_inject -> orquestrador ${orchestrator.id} (pty ${termData.ptyId})`);
     try {
-      const encoder = new TextEncoder();
-      const normalized = content.trim().replace(/\r?\n/g, "\r\n") + "\r\n";
-      const payload = Array.from(encoder.encode(normalized));
-      await invoke("write_pty", { id: termData.ptyId, data: payload });
-      setExecStatus("success");
-      setEdgeStatus("success");
-    } catch (e) {
+      const result = await translate(
+        trimmed,
+        termData.ptyId,
+        termData.cwd ?? "",
+        termData.role ?? "Agent",
+        orchestrator.id,
+      );
+
+      if (result) {
+        console.log(`[NoteNode] 5. Tradução OK (${result.provider}/${result.model}):`, result.command);
+        setExecStatus("success");
+        setEdgeStatus("success");
+      } else {
+        console.error("[NoteNode] 5. translate() retornou null.");
+        setExecStatus("error");
+        setExecError("Tradução falhou");
+        setEdgeStatus("error");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[NoteNode] 5. translate() lançou exceção:", msg);
       setExecStatus("error");
-      setExecError(String(e));
+      setExecError(msg);
       setEdgeStatus("error");
     }
+
     setTimeout(() => {
       setExecStatus("idle");
       setEdgeStatus("idle");
-    }, 2000);
-  }, [id, getEdges, getNode, content, setEdgeStatus]);
+    }, 2500);
+  }, [id, getEdges, getNode, content, setEdgeStatus, translate]);
 
-  const borderColor = commandMode ? "#7c3aed" : BORDER_COLOR;
+  const borderColor = commandMode ? "#A855F7" : BORDER_COLOR;
 
   const modeBadge = (
     <button
@@ -148,7 +215,12 @@ function NoteNode({ id, data, selected }: NodeProps) {
           {commandMode ? "command" : "note"}
         </span>
       }
-      handles={[{ type: "source", position: Position.Right, color: commandMode ? "#7c3aed" : "#f59e0b" }]}
+      handles={[
+        { id: "top", type: "target", position: Position.Top, color: commandMode ? "#A855F7" : "#f59e0b" },
+        { id: "bottom", type: "source", position: Position.Bottom, color: commandMode ? "#A855F7" : "#f59e0b" },
+        { id: "left", type: "target", position: Position.Left, color: commandMode ? "#A855F7" : "#f59e0b" },
+        { id: "right", type: "source", position: Position.Right, color: commandMode ? "#A855F7" : "#f59e0b" },
+      ]}
     >
       {/* Content area */}
       <textarea

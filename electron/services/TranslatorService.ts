@@ -3,8 +3,9 @@ import path from "path";
 import type { BrowserWindow } from "electron";
 import type { PtyService } from "./PtyService";
 import type { PersistenceService } from "./PersistenceService";
+import type { ContextService } from "./ContextService";
 import log from "../log";
-import type { TranslateResult } from "../types";
+import type { TranslateResult, CanvasGraph, ConnectedNodeInfo } from "../types";
 
 // ---------------------------------------------------------------------------
 // Provider config
@@ -58,14 +59,16 @@ export class TranslatorService {
     ptyId: string,
     cwd: string,
     role: string,
+    connectedNodes: ConnectedNodeInfo[],
     persistence: PersistenceService,
     pty: PtyService,
+    context: ContextService,
     window: BrowserWindow | null,
   ): Promise<TranslateResult> {
     // 1. Try local intercept before calling LLM
     const localCmd = tryLocalIntercept(noteContent, cwd);
     if (localCmd) {
-      log.info(`[maestri-x] Local intercept: ${localCmd}`);
+      log.info(`[orchestrated-space] Local intercept: ${localCmd}`);
       pty.write(ptyId, Array.from(Buffer.from(`${localCmd}\r\n`, "utf-8")));
 
       // Emit context-injection for the renderer to show the command
@@ -90,11 +93,16 @@ export class TranslatorService {
     const modelName = modelSetting || DEFAULT_MODELS[provider];
 
     log.info(
-      `[maestri-x] translate_and_inject: provider=${provider}, model=${modelName}, pty=${ptyId}`,
+      `[orchestrated-space] translate_and_inject: provider=${provider}, model=${modelName}, pty=${ptyId}`,
     );
 
-    // 3. Call AI API
-    const systemPrompt = buildSystemPrompt(cwd, role);
+    // 3. Call AI API (with FRESH graph context from frontend)
+    //    connectedNodes comes from Zustand state at IPC call time — no
+    //    staleness from the debounced sync_canvas snapshot.
+    const graph = context.getLastGraph();
+    const systemPrompt = connectedNodes.length > 0
+      ? buildOrchestratorPrompt(cwd, role, connectedNodes)
+      : buildSystemPrompt(cwd, role, buildSwarmContext(ptyId, graph));
     let rawCommand: string;
 
     if (provider === "openai") {
@@ -103,16 +111,19 @@ export class TranslatorService {
       rawCommand = await callAnthropic(apiKey, modelName, systemPrompt, noteContent);
     }
 
-    log.info(`[maestri-x] Translated command (raw): ${rawCommand}`);
+    log.info(`[orchestrated-space] Translated command (raw): ${rawCommand}`);
 
     // 4. Sanitize LLM output
     const clean = sanitizeLlmCommand(rawCommand);
-    log.info(`[maestri-x] Sanitized command: ${clean}`);
+    log.info(`[orchestrated-space] Sanitized command: ${clean}`);
 
-    // 5. Write to PTY
-    pty.write(ptyId, Array.from(Buffer.from(`${clean}\r\n`, "utf-8")));
+    // 5. Smart Write — intercepts <<SEND_TO:...>> and routes to target PTYs
+    const swResult = pty.smartWrite(ptyId, clean, graph, window);
+    if (swResult.dispatched > 0) {
+      log.info(`[orchestrated-space] Swarm routed ${swResult.dispatched} command(s)`);
+    }
 
-    // 6. Emit context-injection event
+    // 6. Emit context-injection event (show what the AI generated)
     const formatted = formatTranslation(clean, provider, modelName);
     window?.webContents.send(`context-injection-${ptyId}`, formatted);
 
@@ -124,12 +135,12 @@ export class TranslatorService {
 // System prompt builder
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(cwd: string, role: string): string {
+function buildSystemPrompt(cwd: string, role: string, swarmContext: string): string {
   const osName = process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux";
   const shell = process.platform === "win32" ? "PowerShell" : "bash";
 
-  return (
-    `You are a terminal command translator for Maestri-X orchestrator.\n` +
+  let prompt =
+    `You are a terminal command translator for Orchestrated Space orchestrator.\n` +
     `OS: ${osName}, Shell: ${shell}\n` +
     `Current directory: ${cwd}\n` +
     `Terminal role: ${role}\n\n` +
@@ -137,7 +148,100 @@ function buildSystemPrompt(cwd: string, role: string): string {
     `Return ONLY the command, no explanation, no markdown, no backticks.\n` +
     `If multiple commands needed, chain with ;\n` +
     `If intent is unclear, return the closest interpretation.\n` +
-    `If untranslatable, return: echo "Cannot translate: [reason]"`
+    `If untranslatable, return: echo "Cannot translate: [reason]"`;
+
+  if (swarmContext) {
+    prompt += "\n\n" + swarmContext;
+  }
+
+  return prompt;
+}
+
+/**
+ * Orchestrator prompt (PT-BR) — used when the frontend provides a fresh
+ * snapshot of connected subordinate nodes via `connectedNodes`. The AI
+ * reads the exact `label` values sent by the frontend, so there's no
+ * hallucination risk from stale backend graph state.
+ */
+function buildOrchestratorPrompt(
+  cwd: string,
+  role: string,
+  connectedNodes: ConnectedNodeInfo[],
+): string {
+  const osName = process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux";
+  const shell = process.platform === "win32" ? "PowerShell" : "bash";
+
+  const labelList = connectedNodes.map((n) => n.label).join(", ");
+  const detailList = connectedNodes
+    .map((n) => {
+      const parts = [`"${n.label}" (${n.type})`];
+      if (n.cwd) parts.push(`cwd: ${n.cwd}`);
+      return `- ${parts.join(", ")}`;
+    })
+    .join("\n");
+
+  return (
+    `[SYSTEM] Você é o Agente Orquestrador Principal. Seus subordinados são outros agentes de IA (Claude Code CLI rodando em terminais interativos).\n` +
+    `Subordinados disponíveis: ${labelList}.\n` +
+    `Para delegar trabalho, você DEVE usar OBRIGATORIAMENTE a sintaxe: <<SEND_TO:NomeDoSubordinado>> prompt_em_linguagem_natural_aqui.\n` +
+    `O prompt é texto conversacional, NÃO é um comando shell. Exemplo: <<SEND_TO:frontend>> Crie a tela de login com validação de email.\n` +
+    `Regras:\n` +
+    `- Escreva prompts em português, claros e acionáveis, como se estivesse pedindo a um colega desenvolvedor.\n` +
+    `- Uma tag por linha. Se precisar delegar para dois subordinados, gere duas tags em linhas separadas.\n` +
+    `- NUNCA adicione texto conversacional na mesma linha da tag. A tag e o prompt devem ser a ÚNICA coisa naquela linha. Seus comentários para o usuário vão em linhas separadas ANTES ou DEPOIS.\n` +
+    `- NUNCA envolva a tag ou o prompt em aspas, crases, ou blocos de código markdown (\`\`\`). Escreva a tag e o prompt crus no texto.\n` +
+    `- Responda ao usuário brevemente sobre o que você está delegando.\n\n` +
+    `Seu papel: ${role}. Seu ambiente: ${osName} / ${shell}, cwd: ${cwd}.\n` +
+    `Detalhes dos subordinados:\n${detailList}`
+  );
+}
+
+/**
+ * Build swarm context string for the AI system prompt.
+ * Lists all terminal neighbors so the AI knows who it can send commands to.
+ */
+function buildSwarmContext(ptyId: string, graph: CanvasGraph | null): string {
+  if (!graph) return "";
+
+  // Find source node
+  const sourceNode = graph.nodes.find(
+    (n) => n.type === "terminal" && n.data?.ptyId === ptyId,
+  );
+  if (!sourceNode) return "";
+
+  const sourceLabel = (typeof sourceNode.data?.label === "string")
+    ? sourceNode.data.label
+    : "Terminal";
+
+  // Find all neighbors via bidirectional edges
+  const neighborIds = new Set<string>();
+  for (const edge of graph.edges) {
+    if (edge.source === sourceNode.id) neighborIds.add(edge.target);
+    if (edge.target === sourceNode.id) neighborIds.add(edge.source);
+  }
+
+  // Collect terminal neighbors with their metadata
+  const neighbors: string[] = [];
+  for (const nId of neighborIds) {
+    const node = graph.nodes.find((n) => n.id === nId);
+    if (!node || node.type !== "terminal") continue;
+
+    const label = typeof node.data?.label === "string" ? node.data.label : "Terminal";
+    const cwd = typeof node.data?.cwd === "string" ? node.data.cwd : "unknown";
+    neighbors.push(`- "${label}" (terminal, cwd: ${cwd})`);
+  }
+
+  if (neighbors.length === 0) return "";
+
+  return (
+    `SWARM CONTEXT:\n` +
+    `You are the terminal "${sourceLabel}".\n` +
+    `Connected terminals:\n` +
+    neighbors.join("\n") + "\n\n" +
+    `To execute commands on connected terminals, respond with EXACTLY:\n` +
+    `<<SEND_TO:NodeName>> command\n` +
+    `Write the tag on a separate line. No markdown code blocks around it.\n` +
+    `You may combine local commands with SEND_TO lines (one per line).`
   );
 }
 
@@ -261,14 +365,27 @@ function sanitizeLlmCommand(raw: string): string {
 
   s = s.trim();
 
-  // Strip leading shell prompt chars
-  if (s.startsWith("$ ")) s = s.slice(2);
-  else if (s.startsWith("> ")) s = s.slice(2);
-  else if (s.startsWith("PS> ")) s = s.slice(4);
-
-  // Take only the first non-empty line
+  // Process each line: strip prompts, keep SEND_TO lines and non-empty commands
+  const SEND_TO_RE = /^<<SEND_TO:.+?>>\s*.+$/;
   const lines = s.split("\n").map((l) => l.trim()).filter(Boolean);
-  return lines[0] ?? s.trim();
+  const cleaned: string[] = [];
+
+  for (let line of lines) {
+    // Keep SEND_TO lines as-is (smartWrite will route them)
+    if (SEND_TO_RE.test(line)) {
+      cleaned.push(line);
+      continue;
+    }
+
+    // Strip leading shell prompt chars
+    if (line.startsWith("$ ")) line = line.slice(2);
+    else if (line.startsWith("> ")) line = line.slice(2);
+    else if (line.startsWith("PS> ")) line = line.slice(4);
+
+    if (line.length > 0) cleaned.push(line);
+  }
+
+  return cleaned.join("\n") || s.trim();
 }
 
 // ---------------------------------------------------------------------------

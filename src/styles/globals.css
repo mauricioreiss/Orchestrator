@@ -28,9 +28,9 @@
   --mx-node-shadow-selected: 0 8px 32px rgba(0, 0, 0, 0.3);
 
   /* Accents (same in both themes) */
-  --mx-accent: #7c3aed;
-  --mx-accent-glow: rgba(124, 58, 237, 0.15);
-  --mx-terminal: #7c3aed;
+  --mx-accent: #A855F7;
+  --mx-accent-glow: rgba(168, 85, 247, 0.15);
+  --mx-terminal: #A855F7;
   --mx-note: #f59e0b;
   --mx-vscode: #06b6d4;
   --mx-obsidian: #a855f7;
@@ -42,18 +42,18 @@
   --mx-error: #ef4444;
 
   /* Canvas */
-  --mx-canvas-glow: rgba(124, 58, 237, 0.06);
+  --mx-canvas-glow: rgba(168, 85, 247, 0.06);
   --mx-grid-dot: rgba(255, 255, 255, 0.06);
 
   /* Sidebar */
   --mx-sidebar-bg: rgba(17, 17, 24, 0.95);
   --mx-sidebar-hover: rgba(255, 255, 255, 0.04);
-  --mx-sidebar-active: rgba(124, 58, 237, 0.12);
+  --mx-sidebar-active: rgba(168, 85, 247, 0.12);
 
   /* Input */
   --mx-input-bg: rgba(10, 10, 15, 0.6);
   --mx-input-border: rgba(255, 255, 255, 0.08);
-  --mx-input-focus: rgba(124, 58, 237, 0.3);
+  --mx-input-focus: rgba(168, 85, 247, 0.3);
   --mx-placeholder: #52525b;
 }
 
@@ -76,9 +76,9 @@
   --mx-node-shadow-selected: 0 4px 24px rgba(0, 0, 0, 0.12);
 
   /* Accents stay vibrant */
-  --mx-accent: #7c3aed;
-  --mx-accent-glow: rgba(124, 58, 237, 0.1);
-  --mx-terminal: #7c3aed;
+  --mx-accent: #A855F7;
+  --mx-accent-glow: rgba(168, 85, 247, 0.1);
+  --mx-terminal: #A855F7;
   --mx-note: #f59e0b;
   --mx-vscode: #06b6d4;
   --mx-obsidian: #a855f7;
@@ -90,19 +90,28 @@
   --mx-error: #ef4444;
 
   /* Canvas */
-  --mx-canvas-glow: rgba(124, 58, 237, 0.03);
+  --mx-canvas-glow: rgba(168, 85, 247, 0.03);
   --mx-grid-dot: rgba(0, 0, 0, 0.06);
 
   /* Sidebar */
   --mx-sidebar-bg: rgba(255, 255, 255, 0.95);
   --mx-sidebar-hover: rgba(0, 0, 0, 0.04);
-  --mx-sidebar-active: rgba(124, 58, 237, 0.08);
+  --mx-sidebar-active: rgba(168, 85, 247, 0.08);
 
   /* Input */
   --mx-input-bg: rgba(241, 245, 249, 0.8);
   --mx-input-border: rgba(0, 0, 0, 0.1);
-  --mx-input-focus: rgba(124, 58, 237, 0.3);
+  --mx-input-focus: rgba(168, 85, 247, 0.3);
   --mx-placeholder: #a1a1aa;
+}
+
+/* ===== Electron frameless window drag ===== */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag-region {
+  -webkit-app-region: no-drag;
 }
 
 /* ===== Base reset ===== */
@@ -121,9 +130,52 @@ body,
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ===== Iframe drag fix ===== */
+/* Prevents iframes/webviews from capturing mouse during React Flow node drag */
+.react-flow__node.dragging iframe,
+.react-flow__node.dragging webview {
+  pointer-events: none !important;
+}
+
 /* ===== React Flow theme overrides ===== */
 .react-flow__background {
   background-color: var(--mx-bg) !important;
+}
+
+/* ===== Handle hitbox extension =====
+   Visual handle is 16x16 (w-4 h-4). A transparent pseudo-element extends
+   the clickable area by 8px on each side, making the effective hit target
+   32x32. Prevents React Flow from mis-resolving clicks to an adjacent
+   handle when nodes are densely packed. */
+.react-flow__handle.mx-handle {
+  z-index: 20;
+}
+.react-flow__handle.mx-handle::before {
+  content: "";
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  bottom: -8px;
+  left: -8px;
+  border-radius: 50%;
+}
+.react-flow__handle.mx-handle:hover {
+  transform: scale(1.2);
+  transition: transform 0.12s ease-out;
+}
+/* React Flow applies its own translate to center the handle on the edge.
+   Re-apply it in hover so we only compound the scale, not reset position. */
+.react-flow__handle.mx-handle.react-flow__handle-top:hover {
+  transform: translate(-50%, 0) scale(1.2);
+}
+.react-flow__handle.mx-handle.react-flow__handle-bottom:hover {
+  transform: translate(-50%, 0) scale(1.2);
+}
+.react-flow__handle.mx-handle.react-flow__handle-left:hover {
+  transform: translate(0, -50%) scale(1.2);
+}
+.react-flow__handle.mx-handle.react-flow__handle-right:hover {
+  transform: translate(0, -50%) scale(1.2);
 }
 
 .react-flow__controls button {
@@ -173,4 +225,139 @@ body,
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--mx-text-muted);
+}
+
+/* ===== Markdown prose overrides ===== */
+.markdown-prose pre {
+  background: var(--mx-input-bg);
+  border: 1px solid var(--mx-border);
+  border-radius: 6px;
+}
+
+.markdown-prose code {
+  color: var(--mx-accent);
+  font-size: 0.85em;
+}
+
+.markdown-prose a {
+  color: #22D3EE;
+}
+
+.markdown-prose table {
+  border-color: var(--mx-border);
+}
+
+.markdown-prose th,
+.markdown-prose td {
+  border-color: var(--mx-border);
+  padding: 4px 8px;
+}
+
+.markdown-prose hr {
+  border-color: var(--mx-border);
+}
+
+.markdown-prose h1,
+.markdown-prose h2,
+.markdown-prose h3,
+.markdown-prose h4 {
+  color: var(--mx-text);
+}
+
+.markdown-prose p,
+.markdown-prose li {
+  color: var(--mx-text-secondary);
+}
+
+.markdown-prose blockquote {
+  border-left-color: var(--mx-accent);
+  color: var(--mx-text-muted);
+}
+
+/* ===== Command Palette (cmdk) ===== */
+[cmdk-overlay] {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+[cmdk-dialog] {
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: 100%;
+  max-width: 520px;
+  background: var(--mx-glass-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--mx-glass-border);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 0 40px var(--mx-accent-glow);
+  overflow: hidden;
+}
+
+[cmdk-input] {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-family: "Inter", system-ui, sans-serif;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--mx-border);
+  color: var(--mx-text);
+  outline: none;
+}
+
+[cmdk-input]::placeholder {
+  color: var(--mx-placeholder);
+}
+
+[cmdk-list] {
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+[cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--mx-text-secondary);
+  transition: background 0.1s, color 0.1s;
+}
+
+[cmdk-item][data-selected="true"] {
+  background: var(--mx-sidebar-active);
+  color: var(--mx-text);
+}
+
+[cmdk-group-heading] {
+  padding: 6px 10px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--mx-text-muted);
+}
+
+[cmdk-separator] {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--mx-border);
+}
+
+[cmdk-empty] {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--mx-text-muted);
 }

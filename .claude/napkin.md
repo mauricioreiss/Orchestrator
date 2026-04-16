@@ -54,7 +54,7 @@ npm run electron:rebuild                   # Rebuild native addons
 - NEVER pass --locale to code serve-web (crashes)
 - memo() em todos os nodes para React Flow virtualization
 - useShallow() (zustand/react/shallow) em todos os seletores de array (hibernatedGroups)
-- NodeErrorBoundary: HOC withErrorBoundary() em Canvas.tsx envolve todos os 9 node types
+- NodeErrorBoundary: HOC withErrorBoundary() em Canvas.tsx envolve todos os 10 node types
 - NoteNode: useEdges() removido, usa getEdges() on-demand no handleExecute (zero edge subscriptions)
 - BrowserNode: `<webview>` tag, no proxy needed (separate guest process, no X-Frame-Options issue)
 - `webviewTag: true` in BrowserWindow webPreferences
@@ -68,7 +68,11 @@ npm run electron:rebuild                   # Rebuild native addons
 - NEVER pass --extensions-dir to serve-web (not a valid flag, crashes the server). Use Settings Sync.
 - Smart Context: VSCode→Terminal edge sends `cd "workspacePath"` to live PTY + sets cwd in Zustand
 - Smart Context: VSCode→Browser edge injects `http://localhost:5173` as default dev URL
-- Edge validation: vscode→browser is now a valid connection (BrowserNode has target handle on Left)
+- Edge validation: vscode→browser and monaco→terminal are valid connections
+- MonacoNode: @monaco-editor/react, read-only v1, indigo #6366f1, nodrag nowheel, JetBrains Mono, theme-aware
+- FileExplorer: 260px right panel, glassmorphism, lazy-load tree, double-click creates MonacoNode
+- FileSystemService: stateless FS reader (VaultService pattern), safeResolve, 1MB max, HIDDEN_DIRS filter
+- IPC: `fs_read_directory`, `fs_read_file` — whitelisted in preload.ts
 - NodeWrapper: inline rename via pencil icon click (all nodes), persists via setNodes + syncDebounced
 - KanbanNode: column title rename via double-click, board overflow-y: hidden (prevents nested scroll conflicts)
 - IPC bridge: `window.maestriAPI` (renamed from electronAPI), typed via `src/global.d.ts`, zero `(window as any)` casts
@@ -108,6 +112,7 @@ npm run electron:rebuild                   # Rebuild native addons
 - Premium Canvas Background (2026-04-15): radial gradient depth glow (--mx-canvas-glow), refined dot grid (--mx-grid-dot), theme-aware
 - HITL Protocol (2026-04-15): [ASK_APPROVAL] token → pending command queue → sonner toast (Approve/Reject) → approve_agent_action/reject_agent_action IPC
 - Sonner Toasts (2026-04-15): sonner installed, ThemedToaster with glassmorphism, positioned top-right
+- Monaco Spatial IDE (2026-04-15): MonacoNode + FileSystemService + FileExplorer panel, 10th node type, read-only v1
 
 ## REGRAS DO BROADCAST
 - AI agent writes `[BROADCAST] <command>` to stdout → PtyService strips it from renderer output

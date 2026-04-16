@@ -26,6 +26,9 @@ import BrowserNode from "./nodes/BrowserNode";
 import KanbanNode from "./nodes/KanbanNode";
 import ApiNode from "./nodes/ApiNode";
 import DbNode from "./nodes/DbNode";
+import MonacoNode from "./nodes/MonacoNode";
+import NativeWorkspaceNode from "./nodes/NativeWorkspaceNode";
+import MarkdownNode from "./nodes/MarkdownNode";
 import ProjectGroupNode from "./nodes/ProjectGroupNode";
 import NodeErrorBoundary from "./nodes/NodeErrorBoundary";
 import FlowEdge from "./edges/FlowEdge";
@@ -34,9 +37,9 @@ import { useCanvasSync } from "../hooks/useCanvasSync";
 import { useHibernation } from "../hooks/useHibernation";
 import { useViewportCulling } from "../hooks/useViewportCulling";
 import { useBroadcast } from "../hooks/useBroadcast";
+import { useCwdCascade } from "../hooks/useCwdCascade";
 import { useCanvasStore } from "../store/canvasStore";
-import { invoke, isElectron } from "../lib/electron";
-import type { TerminalNodeData, NoteNodeData, VSCodeNodeData, GroupNodeData } from "../types";
+import type { TerminalNodeData, NoteNodeData, GroupNodeData } from "../types";
 
 // HOC: wraps each node type with an Error Boundary so a crash in one
 // node doesn't tear down the entire React Flow canvas.
@@ -53,7 +56,7 @@ function withErrorBoundary(Wrapped: ComponentType<NodeProps>) {
 const NODE_EDGE_COLORS: Record<string, string> = {
   Leader: "#10b981",
   Coder: "#3b82f6",
-  Agent: "#7c3aed",
+  Agent: "#A855F7",
   CyberSec: "#ef4444",
 };
 
@@ -66,6 +69,9 @@ const nodeTypes: NodeTypes = {
   kanban: withErrorBoundary(KanbanNode),
   api: withErrorBoundary(ApiNode),
   db: withErrorBoundary(DbNode),
+  monaco: withErrorBoundary(MonacoNode),
+  workspace: withErrorBoundary(NativeWorkspaceNode),
+  markdown: withErrorBoundary(MarkdownNode),
   group: withErrorBoundary(ProjectGroupNode),
 };
 
@@ -91,29 +97,16 @@ export default function Canvas() {
   useHibernation();
   useViewportCulling();
   useBroadcast();
+  useCwdCascade();
 
   useEffect(() => { load(); }, [load]);
 
+  // Magnetic edges: allow any node-to-node connection except self-loops.
+  // Type-specific logic (cwd cascade, URL injection, edge color) lives in
+  // onConnect + useCwdCascade — not in validation. Connect first, specialize after.
   const isValidConnection: IsValidConnection = useCallback(
-    (connection) => {
-      const source = getNode(connection.source);
-      const target = getNode(connection.target);
-      if (!source || !target) return false;
-      const s = source.type;
-      const t = target.type;
-      if (s === "group" || t === "group") return false;
-      if (s === "note" && t === "terminal") return true;
-      if (s === "vscode" && t === "terminal") return true;
-      if (s === "terminal" && t === "terminal") return true;
-      if (s === "obsidian" && t === "terminal") return true;
-      if (s === "browser" && t === "terminal") return true;
-      if (s === "kanban" && t === "terminal") return true;
-      if (s === "api" && t === "terminal") return true;
-      if (s === "db" && t === "terminal") return true;
-      if (s === "vscode" && t === "browser") return true;
-      return false;
-    },
-    [getNode],
+    (connection) => connection.source !== connection.target,
+    [],
   );
 
   const onConnect: OnConnect = useCallback(
@@ -121,51 +114,30 @@ export default function Canvas() {
       const sourceNode = getNode(params.source);
       const targetNode = getNode(params.target);
 
-      let stroke = "#7c3aed";
+      let stroke = "#A855F7";
       if (sourceNode?.type === "note") {
         const noteData = sourceNode.data as NoteNodeData;
-        stroke = noteData.commandMode ? "#7c3aed" : "#f59e0b";
+        stroke = noteData.commandMode ? "#A855F7" : "#f59e0b";
       } else if (sourceNode?.type === "vscode") stroke = "#06b6d4";
       else if (sourceNode?.type === "obsidian") stroke = "#a855f7";
       else if (sourceNode?.type === "browser") stroke = "#f43f5e";
       else if (sourceNode?.type === "kanban") stroke = "#10b981";
       else if (sourceNode?.type === "api") stroke = "#f97316";
       else if (sourceNode?.type === "db") stroke = "#0ea5e9";
+      else if (sourceNode?.type === "monaco") stroke = "#6366f1";
+      else if (sourceNode?.type === "workspace") stroke = "#14b8a6";
+      else if (sourceNode?.type === "markdown") stroke = "#64748b";
       else if (sourceNode?.type === "terminal") {
         const role = (sourceNode.data as TerminalNodeData)?.role ?? "Agent";
-        stroke = NODE_EDGE_COLORS[role] ?? "#7c3aed";
+        stroke = NODE_EDGE_COLORS[role] ?? "#A855F7";
       }
       storeConnect(params, stroke);
 
-      // Smart Context: VSCode → Terminal inherits workspace folder
-      if (
-        sourceNode?.type === "vscode" &&
-        targetNode?.type === "terminal" &&
-        isElectron()
-      ) {
-        const workspacePath = (sourceNode.data as VSCodeNodeData)?.workspacePath;
-        if (workspacePath) {
-          // Update terminal node's cwd in store (used by future PTY spawns)
-          setNodes((nds) =>
-            nds.map((n) =>
-              n.id === params.target
-                ? { ...n, data: { ...n.data, cwd: workspacePath } }
-                : n,
-            ),
-          );
-          // If terminal already has a live PTY, cd into the folder
-          const ptyId = (targetNode.data as TerminalNodeData)?.ptyId;
-          if (ptyId) {
-            const cdCmd = `cd "${workspacePath}"\r\n`;
-            const bytes = Array.from(new TextEncoder().encode(cdCmd));
-            invoke("write_pty", { id: ptyId, data: bytes }).catch((e) =>
-              console.error("[SmartContext] cd failed:", e),
-            );
-          }
-        }
-      }
+      // Path cascade (vscode/terminal/workspace/obsidian -> terminal/workspace)
+      // is handled reactively by useCwdCascade. Only non-path smart-context
+      // lives here.
 
-      // Smart Context: VSCode → Browser injects default dev URL (Vite :5173)
+      // Smart Context: VSCode -> Browser injects default dev URL (Vite :5173)
       if (
         sourceNode?.type === "vscode" &&
         targetNode?.type === "browser"
@@ -276,7 +248,7 @@ export default function Canvas() {
         edgeTypes={edgeTypes}
         fitView={!loaded || nodes.length === 0}
         proOptions={{ hideAttribution: true }}
-        defaultEdgeOptions={{ animated: true, style: { stroke: "#7c3aed" } }}
+        defaultEdgeOptions={{ animated: true, style: { stroke: "#A855F7" } }}
         minZoom={0.1}
         maxZoom={2}
       >
@@ -300,11 +272,17 @@ export default function Canvas() {
             if (node.type === "kanban") return "#10b981";
             if (node.type === "api") return "#f97316";
             if (node.type === "db") return "#0ea5e9";
+            if (node.type === "monaco") return "#6366f1";
+            if (node.type === "workspace") return "#14b8a6";
+            if (node.type === "markdown") return "#64748b";
             if (node.type === "group") return (node.data as GroupNodeData)?.color ?? "#3b82f6";
-            return "#7c3aed";
+            return "#A855F7";
           }}
-          maskColor="rgba(10, 10, 15, 0.8)"
-          style={{ borderRadius: 8 }}
+          maskColor="rgba(10, 10, 15, 0.85)"
+          style={{ borderRadius: 8, background: "#18181b" }}
+          pannable
+          zoomable
+          nodeStrokeWidth={0}
         />
       </ReactFlow>
     </div>

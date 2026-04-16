@@ -4,6 +4,8 @@ export default {
   theme: {
     extend: {
       colors: {
+        "brand-purple": "#A855F7",
+        "brand-cyan": "#22D3EE",
         mx: {
           bg: "var(--mx-bg)",
           surface: "var(--mx-surface)",
@@ -34,5 +36,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [require("@tailwindcss/typography")],
 };

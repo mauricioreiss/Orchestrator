@@ -3,7 +3,7 @@ import * as pty from "node-pty";
 import { v4 as uuidv4 } from "uuid";
 import stripAnsi from "strip-ansi";
 import log from "../log";
-import type { PtyInfo } from "../types";
+import type { PtyInfo, CanvasGraph } from "../types";
 
 // ---------------------------------------------------------------------------
 // Ring Buffer — circular byte buffer for PTY output history
@@ -81,6 +81,8 @@ export class PtyService {
   private broadcastHandler: ((sourcePtyId: string, command: string) => void) | null = null;
   /** Callback invoked when an [ASK_APPROVAL] token is detected in PTY output. */
   private approvalHandler: ((sourcePtyId: string, command: string) => void) | null = null;
+  /** Callback invoked when a <<SEND_TO:...>> token is detected in PTY output. */
+  private dispatchHandler: ((sourcePtyId: string, targetLabel: string, command: string) => void) | null = null;
   /** Commands awaiting user approval, keyed by ptyId. */
   private pendingApprovals = new Map<string, string>();
 
@@ -97,6 +99,11 @@ export class PtyService {
   /** Register a handler for [ASK_APPROVAL] tokens detected in PTY output. */
   setApprovalHandler(handler: (sourcePtyId: string, command: string) => void): void {
     this.approvalHandler = handler;
+  }
+
+  /** Register a handler for <<SEND_TO:...>> tokens detected in PTY output. */
+  setDispatchHandler(handler: (sourcePtyId: string, targetLabel: string, command: string) => void): void {
+    this.dispatchHandler = handler;
   }
 
   /** Execute a previously stored pending approval command. */
@@ -176,7 +183,7 @@ export class PtyService {
 
     // --- Output handler: detect tokens, push to ring buffer + schedule flush ---
     proc.onData((data: string) => {
-      const { cleanData, broadcasts, approvals } = this.extractTokens(data);
+      const { cleanData, broadcasts, approvals, dispatches } = this.extractTokens(data);
 
       // Fan-out broadcast commands to connected terminals
       for (const cmd of broadcasts) {
@@ -189,6 +196,12 @@ export class PtyService {
         log.info(`[PtyService] approval request from ${id}: ${cmd}`);
         this.pendingApprovals.set(id, cmd);
         this.approvalHandler?.(id, cmd);
+      }
+
+      // Swarm dispatch: route commands to named target terminals via backend handler
+      for (const dispatch of dispatches) {
+        log.info(`[PtyService] dispatch detected from ${id} -> ${dispatch.targetLabel}: ${dispatch.command}`);
+        this.dispatchHandler?.(id, dispatch.targetLabel, dispatch.command);
       }
 
       // Only push non-broadcast output to buffers
@@ -345,15 +358,168 @@ export class PtyService {
   }
 
   // -----------------------------------------------------------------------
+  // Smart Write — intercepts <<SEND_TO:...>> BEFORE writing to PTY stdin
+  // -----------------------------------------------------------------------
+
+  smartWrite(
+    ptyId: string,
+    text: string,
+    graph: CanvasGraph | null,
+    win: BrowserWindow | null,
+  ): { localLines: number; dispatched: number } {
+    // Optional leading quote tolerates cmd.exe echo output, e.g.
+    //   echo "<<SEND_TO:frontend>> Crie a tela" -> "<<SEND_TO:frontend>> Crie a tela"
+    // The trailing quote is handled by sanitizeDispatchCommand.
+    const SEND_TO_RE = /^["']?<<SEND_TO:([^>\r\n]+?)>>\s*([^\r\n]+)$/;
+    const lines = text.split(/\r?\n/);
+    let localLines = 0;
+    let dispatched = 0;
+
+    for (const line of lines) {
+      const stripped = line.trim();
+      if (stripped.length === 0) continue;
+
+      const match = stripped.match(SEND_TO_RE);
+      if (match && graph) {
+        const targetLabel = match[1].trim();
+        const command = this.sanitizeDispatchCommand(match[2]);
+        if (command.length > 0 && this.routeToTarget(ptyId, targetLabel, command, graph, win)) {
+          dispatched++;
+          continue;
+        }
+      }
+
+      // Normal line: write to local PTY
+      this.write(ptyId, Array.from(Buffer.from(stripped + "\r\n", "utf-8")));
+      localLines++;
+    }
+
+    return { localLines, dispatched };
+  }
+
+  // -----------------------------------------------------------------------
+  // Dispatch payload sanitizer
+  //
+  // In the new Swarm architecture, target terminals run an interactive CLI
+  // (Claude Code) and the payload is a natural-language prompt, not a shell
+  // command. But the noise sources are the same:
+  //   - Stray trailing quote from `echo "<<SEND_TO:X>> prompt"` echoes
+  //   - Conversational suffix from the AI on the same line
+  //   - Matching outer quotes wrapping the whole prompt
+  //   - Trailing punctuation (comma/semicolon) from AI chatter
+  //
+  // Only the clean prompt (as if typed by a human) should reach the target.
+  // -----------------------------------------------------------------------
+
+  private sanitizeDispatchCommand(raw: string): string {
+    let cmd = raw.trim();
+    if (cmd.length === 0) return cmd;
+
+    // 1. Unbalanced quote: an odd count means the last one is a stray wrapper
+    //    (e.g. `npm run dev" e depois me avise`). Cut it and anything after.
+    for (const q of ['"', "'"]) {
+      const count = (cmd.match(new RegExp(q, "g")) || []).length;
+      if (count % 2 === 1) {
+        const idx = cmd.lastIndexOf(q);
+        if (idx >= 0) cmd = cmd.slice(0, idx).trim();
+      }
+    }
+
+    // 2. Command fully wrapped in matching outer quotes with no same-type
+    //    quote inside — peel them (`"npm run dev"` -> `npm run dev`).
+    if (cmd.length >= 2) {
+      const first = cmd[0];
+      const last = cmd[cmd.length - 1];
+      if ((first === '"' || first === "'") && first === last && !cmd.slice(1, -1).includes(first)) {
+        cmd = cmd.slice(1, -1).trim();
+      }
+    }
+
+    // 3. Trailing punctuation chatter.
+    cmd = cmd.replace(/[,;]+\s*$/, "").trim();
+
+    return cmd;
+  }
+
+  /**
+   * Route a prompt to a target terminal by label.
+   *
+   * Target terminals run an interactive CLI (e.g. Claude Code) that treats
+   * stdin as conversational input. We simulate "user types + presses Enter"
+   * by writing the sanitized payload followed by a single CR (`\r`). A full
+   * CRLF would be interpreted as Enter + extra newline by some CLIs.
+   *
+   * Uses bidirectional edge lookup: the target can be upstream or downstream.
+   */
+  routeToTarget(
+    sourcePtyId: string,
+    targetLabel: string,
+    command: string,
+    graph: CanvasGraph,
+    win: BrowserWindow | null,
+  ): boolean {
+    // 1. Find source node by ptyId
+    const sourceNode = graph.nodes.find(
+      (n) => n.type === "terminal" && n.data?.ptyId === sourcePtyId,
+    );
+    if (!sourceNode) return false;
+
+    // 2. Find ALL neighbors (bidirectional edges)
+    const neighborIds = new Set<string>();
+    for (const edge of graph.edges) {
+      if (edge.source === sourceNode.id) neighborIds.add(edge.target);
+      if (edge.target === sourceNode.id) neighborIds.add(edge.source);
+    }
+
+    // 3. Find target terminal by label among neighbors
+    const targetNode = graph.nodes.find(
+      (n) => neighborIds.has(n.id) && n.type === "terminal" && n.data?.label === targetLabel,
+    );
+    if (!targetNode) return false;
+
+    const targetPtyId = targetNode.data?.ptyId;
+    if (typeof targetPtyId !== "string" || !targetPtyId) return false;
+
+    // 4. Inject prompt + Enter (CR) into target CLI's stdin
+    try {
+      this.write(targetPtyId, Array.from(Buffer.from(command + "\r", "utf-8")));
+    } catch {
+      log.warn(`[Swarm] Failed to write to target PTY ${targetPtyId}`);
+      return false;
+    }
+
+    log.info(`[Swarm] Routed: ${sourceNode.id} -> ${targetNode.id} (${targetLabel}): ${command}`);
+
+    // 5. Emit visual feedback event for frontend edge flash
+    win?.webContents.send("swarm-dispatch", {
+      sourcePtyId,
+      sourceNodeId: sourceNode.id,
+      targetNodeId: targetNode.id,
+      targetLabel,
+      command,
+    });
+
+    return true;
+  }
+
+  // -----------------------------------------------------------------------
   // Internal: extract [BROADCAST] and [ASK_APPROVAL] tokens from PTY output
   // -----------------------------------------------------------------------
 
-  private extractTokens(rawData: string): { cleanData: string; broadcasts: string[]; approvals: string[] } {
-    const BROADCAST_RE = /^\[BROADCAST]\s*(.+)$/;
-    const APPROVAL_RE = /^\[ASK_APPROVAL]\s*(.+)$/;
+  private extractTokens(rawData: string): {
+    cleanData: string;
+    broadcasts: string[];
+    approvals: string[];
+    dispatches: { targetLabel: string; command: string }[];
+  } {
+    const BROADCAST_RE = /^\[BROADCAST]\s*([^\r\n]+)$/;
+    const APPROVAL_RE = /^\[ASK_APPROVAL]\s*([^\r\n]+)$/;
+    // Optional leading quote tolerates echo output wrappers from cmd.exe.
+    const SEND_TO_RE = /^["']?<<SEND_TO:([^>\r\n]+?)>>\s*([^\r\n]+)$/;
     const lines = rawData.split("\n");
     const broadcasts: string[] = [];
     const approvals: string[] = [];
+    const dispatches: { targetLabel: string; command: string }[] = [];
     const cleanLines: string[] = [];
 
     for (const line of lines) {
@@ -371,10 +537,19 @@ export class PtyService {
         continue;
       }
 
+      const sendToMatch = stripped.match(SEND_TO_RE);
+      if (sendToMatch) {
+        const command = this.sanitizeDispatchCommand(sendToMatch[2]);
+        if (command.length > 0) {
+          dispatches.push({ targetLabel: sendToMatch[1].trim(), command });
+          continue;
+        }
+      }
+
       cleanLines.push(line);
     }
 
-    return { cleanData: cleanLines.join("\n"), broadcasts, approvals };
+    return { cleanData: cleanLines.join("\n"), broadcasts, approvals, dispatches };
   }
 
   // -----------------------------------------------------------------------

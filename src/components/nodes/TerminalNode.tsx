@@ -34,8 +34,10 @@ const ROLE_BORDER: Record<string, string> = {
 };
 
 const HANDLES = [
-  { type: "target" as const, position: Position.Left },
-  { type: "source" as const, position: Position.Right },
+  { id: "top", type: "target" as const, position: Position.Top },
+  { id: "bottom", type: "source" as const, position: Position.Bottom },
+  { id: "left", type: "target" as const, position: Position.Left },
+  { id: "right", type: "source" as const, position: Position.Right },
 ];
 
 function TerminalNode({ id, data, selected, parentId }: NodeProps) {
@@ -69,6 +71,35 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
       );
     }
   }, [ptyId, id, nodeData.ptyId, setNodes]);
+
+  // Live directory change: when data.cwd mutates after mount (e.g. via Deep
+  // CWD cascade), issue a real `cd /d "<path>"` into the live shell. The
+  // PTY spawned with the initial cwd, so we skip the first equality check.
+  const prevCwdRef = useRef<string | undefined>(nodeData.cwd);
+  useEffect(() => {
+    if (!isElectron()) return;
+    if (!ptyId) return;
+    if (!nodeData.cwd) return;
+    if (prevCwdRef.current === nodeData.cwd) return;
+
+    prevCwdRef.current = nodeData.cwd;
+
+    const cdBytes = Array.from(
+      new TextEncoder().encode(`cd /d "${nodeData.cwd}"\r`),
+    );
+    invoke("write_pty", { id: ptyId, data: cdBytes }).catch((err) =>
+      console.error("[TerminalNode] live cd failed:", err),
+    );
+
+    const clsBytes = Array.from(new TextEncoder().encode("cls\r"));
+    const clearTimer = setTimeout(() => {
+      invoke("write_pty", { id: ptyId, data: clsBytes }).catch((err) =>
+        console.error("[TerminalNode] cls failed:", err),
+      );
+    }, 120);
+
+    return () => clearTimeout(clearTimer);
+  }, [nodeData.cwd, ptyId]);
 
   const hasSourceTerminals = useCallback(() => {
     const edges = getEdges();
@@ -183,7 +214,7 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
           </svg>
           <p className="text-sm text-center" style={{ color: "var(--mx-text-secondary)" }}>Ambiente Web detectado</p>
           <p className="text-[11px] text-center leading-relaxed max-w-[260px]" style={{ color: "var(--mx-text-muted)" }}>
-            Use a versao Desktop do Maestri-X para terminais interativos.
+            Use a versao Desktop do Orchestrated Space para terminais interativos.
           </p>
         </div>
       </NodeWrapper>

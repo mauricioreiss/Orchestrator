@@ -111,6 +111,29 @@ export interface DbNodeData {
   [key: string]: unknown;
 }
 
+export interface MonacoNodeData {
+  type: "monaco";
+  label: string;
+  filePath: string;
+  rootDir: string;
+  language: string;
+  [key: string]: unknown;
+}
+
+export interface WorkspaceNodeData {
+  type: "workspace";
+  label: string;
+  path: string;
+  [key: string]: unknown;
+}
+
+export interface MarkdownNodeData {
+  type: "markdown";
+  label: string;
+  content: string;
+  [key: string]: unknown;
+}
+
 export const GROUP_COLORS = [
   "#ef4444", "#f97316", "#f59e0b", "#22c55e", "#14b8a6",
   "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899", "#64748b",
@@ -125,7 +148,10 @@ export type CanvasNodeData =
   | BrowserNodeData
   | KanbanNodeData
   | ApiNodeData
-  | DbNodeData;
+  | DbNodeData
+  | MonacoNodeData
+  | WorkspaceNodeData
+  | MarkdownNodeData;
 
 // -- Vault types --
 
@@ -194,6 +220,18 @@ export interface TranslateResult {
   model: string;
 }
 
+/**
+ * Snapshot of a node that the orchestrator can command. Built on the
+ * frontend from fresh Zustand state at the moment of the IPC call, so the
+ * AI always sees the current graph (no staleness from debounced sync).
+ */
+export interface ConnectedNodeInfo {
+  label: string;
+  type: string;
+  cwd?: string;
+  ptyId?: string;
+}
+
 // -- Proxy types --
 
 export interface ProxyStatus {
@@ -227,4 +265,20 @@ export interface SyncResult {
   piped: number;
   leader_contexts: number;
   cwd_updates: CwdUpdate[];
+}
+
+// -- File system types (FileSystemService) --
+
+export interface FsEntry {
+  name: string;
+  relative_path: string;
+  size: number;
+  is_dir: boolean;
+}
+
+export interface FsFileContent {
+  relative_path: string;
+  content: string;
+  size: number;
+  language: string;
 }

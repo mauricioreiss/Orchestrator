@@ -1,8 +1,8 @@
 import { memo } from "react";
-import { BaseEdge, getBezierPath, type EdgeProps } from "@xyflow/react";
+import { BaseEdge, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
 
 interface FlowEdgeData {
-  status?: "idle" | "translating" | "success" | "error" | "broadcasting";
+  status?: "idle" | "translating" | "success" | "error" | "broadcasting" | "dispatching";
   [key: string]: unknown;
 }
 
@@ -17,20 +17,22 @@ function FlowEdge({
   markerEnd,
   data,
 }: EdgeProps) {
-  const [edgePath] = getBezierPath({
+  const [edgePath] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
+    borderRadius: 15,
   });
 
   const edgeData = data as FlowEdgeData | undefined;
   const status = edgeData?.status ?? "idle";
-  const stroke = (style?.stroke as string) ?? "#7c3aed";
+  const stroke = (style?.stroke as string) ?? "#A855F7";
 
   const isBroadcasting = status === "broadcasting";
+  const isDispatching = status === "dispatching";
   const isTranslating = status === "translating";
   const isSuccess = status === "success";
   const isError = status === "error";
@@ -38,13 +40,15 @@ function FlowEdge({
   // Active color overrides
   const activeStroke = isBroadcasting
     ? "#10b981"
-    : isTranslating
-      ? "#a78bfa"
-      : isSuccess
-        ? "#34d399"
-        : isError
-          ? "#f87171"
-          : stroke;
+    : isDispatching
+      ? "#22d3ee"
+      : isTranslating
+        ? "#a78bfa"
+        : isSuccess
+          ? "#34d399"
+          : isError
+            ? "#f87171"
+            : stroke;
 
   return (
     <>
@@ -53,15 +57,15 @@ function FlowEdge({
         d={edgePath}
         fill="none"
         stroke={activeStroke}
-        strokeWidth={isBroadcasting ? 12 : isTranslating ? 10 : 6}
-        strokeOpacity={isBroadcasting ? 0.4 : isTranslating ? 0.3 : 0.15}
+        strokeWidth={(isBroadcasting || isDispatching) ? 12 : isTranslating ? 10 : 6}
+        strokeOpacity={(isBroadcasting || isDispatching) ? 0.4 : isTranslating ? 0.3 : 0.15}
         filter="blur(4px)"
       >
-        {(isBroadcasting || isTranslating) && (
+        {(isBroadcasting || isDispatching || isTranslating) && (
           <animate
             attributeName="stroke-opacity"
-            values={isBroadcasting ? "0.2;0.5;0.2" : "0.15;0.4;0.15"}
-            dur={isBroadcasting ? "0.6s" : "1s"}
+            values={(isBroadcasting || isDispatching) ? "0.2;0.5;0.2" : "0.15;0.4;0.15"}
+            dur={(isBroadcasting || isDispatching) ? "0.6s" : "1s"}
             repeatCount="indefinite"
           />
         )}
@@ -80,26 +84,26 @@ function FlowEdge({
 
       {/* Animated flowing dots */}
       <circle
-        r={isBroadcasting ? 4.5 : isTranslating ? 4 : 3}
+        r={(isBroadcasting || isDispatching) ? 4.5 : isTranslating ? 4 : 3}
         fill={activeStroke}
         opacity={0.9}
       >
         <animateMotion
-          dur={isBroadcasting ? "0.5s" : isTranslating ? "0.8s" : "2s"}
+          dur={(isBroadcasting || isDispatching) ? "0.5s" : isTranslating ? "0.8s" : "2s"}
           repeatCount="indefinite"
           path={edgePath}
         />
       </circle>
       <circle
-        r={isBroadcasting ? 4 : isTranslating ? 4 : 3}
+        r={(isBroadcasting || isDispatching) ? 4 : isTranslating ? 4 : 3}
         fill={activeStroke}
         opacity={0.5}
       >
         <animateMotion
-          dur={isBroadcasting ? "0.5s" : isTranslating ? "0.8s" : "2s"}
+          dur={(isBroadcasting || isDispatching) ? "0.5s" : isTranslating ? "0.8s" : "2s"}
           repeatCount="indefinite"
           path={edgePath}
-          begin={isBroadcasting ? "-0.25s" : isTranslating ? "-0.4s" : "-1s"}
+          begin={(isBroadcasting || isDispatching) ? "-0.25s" : isTranslating ? "-0.4s" : "-1s"}
         />
       </circle>
 
@@ -125,8 +129,8 @@ function FlowEdge({
         </>
       )}
 
-      {/* Broadcast cascade: 6 fast dots with staggered timing */}
-      {isBroadcasting && (
+      {/* Dispatch/Broadcast cascade: fast dots with staggered timing */}
+      {(isBroadcasting || isDispatching) && (
         <>
           <circle r="3.5" fill={activeStroke} opacity={0.8}>
             <animateMotion dur="0.5s" repeatCount="indefinite" path={edgePath} begin="-0.1s" />
