@@ -181,18 +181,24 @@ function buildOrchestratorPrompt(
     .join("\n");
 
   return (
-    `[SYSTEM] Você é o Agente Orquestrador Principal. Seus subordinados são outros agentes de IA (Claude Code CLI rodando em terminais interativos).\n` +
+    `[SYSTEM] Você é um roteador de comandos silencioso. Sua ÚNICA função é gerar tags <<SEND_TO>>.\n` +
     `Subordinados disponíveis: ${labelList}.\n` +
-    `Para delegar trabalho, você DEVE usar OBRIGATORIAMENTE a sintaxe: <<SEND_TO:NomeDoSubordinado>> prompt_em_linguagem_natural_aqui.\n` +
-    `O prompt é texto conversacional, NÃO é um comando shell. Exemplo: <<SEND_TO:frontend>> Crie a tela de login com validação de email.\n` +
-    `Regras:\n` +
-    `- Escreva prompts em português, claros e acionáveis, como se estivesse pedindo a um colega desenvolvedor.\n` +
-    `- Uma tag por linha. Se precisar delegar para dois subordinados, gere duas tags em linhas separadas.\n` +
-    `- NUNCA adicione texto conversacional na mesma linha da tag. A tag e o prompt devem ser a ÚNICA coisa naquela linha. Seus comentários para o usuário vão em linhas separadas ANTES ou DEPOIS.\n` +
-    `- NUNCA envolva a tag ou o prompt em aspas, crases, ou blocos de código markdown (\`\`\`). Escreva a tag e o prompt crus no texto.\n` +
-    `- Responda ao usuário brevemente sobre o que você está delegando.\n\n` +
-    `Seu papel: ${role}. Seu ambiente: ${osName} / ${shell}, cwd: ${cwd}.\n` +
-    `Detalhes dos subordinados:\n${detailList}`
+    `Sintaxe OBRIGATÓRIA: <<SEND_TO:NomeDoSubordinado>> prompt_em_linguagem_natural_aqui\n\n` +
+    `REGRA SUPREMA: Sua resposta deve conter APENAS tags <<SEND_TO>>, uma por linha. NADA MAIS.\n` +
+    `- Você está PROIBIDO de escrever qualquer texto que não seja uma tag <<SEND_TO>>.\n` +
+    `- NÃO explique o que vai fazer. NÃO diga "vou pedir". NÃO cumprimente. NÃO comente.\n` +
+    `- NÃO mencione nós que não estão na lista de subordinados.\n` +
+    `- O prompt após a tag é linguagem natural em português, claro e acionável.\n` +
+    `- NUNCA envolva a tag em aspas, crases, ou blocos de código markdown.\n` +
+    `- Se precisar delegar para dois subordinados, gere duas linhas, cada uma com sua tag.\n\n` +
+    `EXEMPLO CORRETO (resposta completa):\n` +
+    `<<SEND_TO:frontend>> Crie a tela de login com validação de email\n` +
+    `<<SEND_TO:backend>> Crie o endpoint POST /auth/login com JWT\n\n` +
+    `EXEMPLO ERRADO (PROIBIDO):\n` +
+    `Vou pedir para o frontend criar a tela de login.\n` +
+    `<<SEND_TO:frontend>> Crie a tela de login\n\n` +
+    `Seu papel: ${role}. Ambiente: ${osName} / ${shell}, cwd: ${cwd}.\n` +
+    `Subordinados:\n${detailList}`
   );
 }
 
@@ -368,12 +374,13 @@ function sanitizeLlmCommand(raw: string): string {
   // Process each line: strip prompts, keep SEND_TO lines and non-empty commands
   const SEND_TO_RE = /^<<SEND_TO:.+?>>\s*.+$/;
   const lines = s.split("\n").map((l) => l.trim()).filter(Boolean);
-  const cleaned: string[] = [];
+  const sendToLines: string[] = [];
+  const otherLines: string[] = [];
 
   for (let line of lines) {
     // Keep SEND_TO lines as-is (smartWrite will route them)
     if (SEND_TO_RE.test(line)) {
-      cleaned.push(line);
+      sendToLines.push(line);
       continue;
     }
 
@@ -382,10 +389,16 @@ function sanitizeLlmCommand(raw: string): string {
     else if (line.startsWith("> ")) line = line.slice(2);
     else if (line.startsWith("PS> ")) line = line.slice(4);
 
-    if (line.length > 0) cleaned.push(line);
+    if (line.length > 0) otherLines.push(line);
   }
 
-  return cleaned.join("\n") || s.trim();
+  // If response contains SEND_TO tags, ONLY keep those — drop conversational
+  // chatter the AI added despite the prompt forbidding it.
+  if (sendToLines.length > 0) {
+    return sendToLines.join("\n");
+  }
+
+  return otherLines.join("\n") || s.trim();
 }
 
 // ---------------------------------------------------------------------------

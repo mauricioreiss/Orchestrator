@@ -480,9 +480,14 @@ export class PtyService {
     const targetPtyId = targetNode.data?.ptyId;
     if (typeof targetPtyId !== "string" || !targetPtyId) return false;
 
-    // 4. Inject prompt + Enter (CR) into target CLI's stdin
+    // 4. Inject prompt + Enter (CR) into target CLI's stdin.
+    //    Write the full string in ONE atomic call directly to the pty process.
+    //    Going through this.write() adds a byte-array round-trip that isn't
+    //    needed and could contribute to interleaved echo on fast terminals.
+    const targetInstance = this.instances.get(targetPtyId);
+    if (!targetInstance) return false;
     try {
-      this.write(targetPtyId, Array.from(Buffer.from(command + "\r", "utf-8")));
+      targetInstance.process.write(command + "\r");
     } catch {
       log.warn(`[Swarm] Failed to write to target PTY ${targetPtyId}`);
       return false;

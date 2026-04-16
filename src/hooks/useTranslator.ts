@@ -91,10 +91,11 @@ export function useTranslator(): UseTranslatorReturn {
         seen.add(neighborId);
         const neighborNode = nodes.find((n) => n.id === neighborId);
         if (!neighborNode) continue;
-        // Skip note nodes — the note is the command source, not a subordinate
-        if (neighborNode.type === "note") continue;
+        // Only expose terminals with a live ptyId — the AI can only SEND_TO
+        // terminals running interactive CLIs. Skip notes, vscode, browser, etc.
+        if (neighborNode.type !== "terminal") continue;
         const info = toConnectedNodeInfo(neighborNode);
-        if (info) connectedNodes.push(info);
+        if (info && info.ptyId) connectedNodes.push(info);
       }
 
       setStatus("translating");
