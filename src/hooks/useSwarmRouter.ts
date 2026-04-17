@@ -3,16 +3,14 @@ import { listen, isElectron } from "../lib/electron";
 import { useCanvasStore } from "../store/canvasStore";
 
 interface SwarmDispatchEvent {
-  sourcePtyId: string;
-  sourceNodeId: string;
-  targetNodeId: string;
+  targetPtyId: string;
   targetLabel: string;
   command: string;
 }
 
 /**
  * Visual-only listener for swarm-dispatch events.
- * All routing logic lives in the backend (PtyService.routeToTarget).
+ * All routing logic lives in the backend (TranslatorService).
  * This hook only flashes the affected edges with "dispatching" status.
  */
 export function useSwarmRouter(): void {
@@ -22,15 +20,19 @@ export function useSwarmRouter(): void {
     if (!isElectron()) return;
 
     const unlisten = listen<SwarmDispatchEvent>("swarm-dispatch", (payload) => {
-      const { sourceNodeId, targetNodeId, targetLabel, command } = payload;
+      const { targetPtyId, targetLabel, command } = payload;
       const store = useCanvasStore.getState();
 
-      // Find edge(s) between source and target (either direction)
+      // Find the target node by ptyId
+      const targetNode = store.nodes.find(
+        (n) => n.type === "terminal" && (n.data as Record<string, unknown>)?.ptyId === targetPtyId,
+      );
+      if (!targetNode) return;
+
+      // Flash ALL edges touching the target node (bidirectional)
       const edgeIds = store.edges
         .filter(
-          (e) =>
-            (e.source === sourceNodeId && e.target === targetNodeId) ||
-            (e.source === targetNodeId && e.target === sourceNodeId),
+          (e) => e.source === targetNode.id || e.target === targetNode.id,
         )
         .map((e) => e.id);
 

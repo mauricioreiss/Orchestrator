@@ -116,32 +116,11 @@ function NoteNode({ id, data, selected }: NodeProps) {
     const targets = connected
       .map((e) => getNode(e.source === id ? e.target : e.source))
       .filter((n): n is NonNullable<typeof n> => !!n);
-    const orchestrator = targets.find((n) => n.type === "terminal");
-    console.log("[NoteNode] 3. Vizinhos resolvidos:", targets.map((n) => ({ id: n.id, type: n.type, label: (n.data as Record<string, unknown>).label })), "orquestrador:", orchestrator?.id);
 
-    if (!orchestrator) {
-      const types = targets.map((n) => n.type).join(", ") || "nenhum";
-      console.warn(`[NoteNode] Nenhum terminal entre os alvos. Tipos encontrados: ${types}`);
-      setExecStatus("error");
-      setExecError(`Alvo não é terminal (${types})`);
-      setTimeout(() => { setExecStatus("idle"); setExecError(null); }, 2500);
-      return;
-    }
-
-    const termData = orchestrator.data as TerminalNodeData;
-    if (!termData.ptyId) {
-      console.warn(`[NoteNode] Terminal ${orchestrator.id} ainda sem ptyId — aguarde o spawn.`);
-      setExecStatus("error");
-      setExecError("Terminal ainda iniciando");
-      setTimeout(() => { setExecStatus("idle"); setExecError(null); }, 2500);
-      return;
-    }
-
-    // Build subordinate list from the NOTE's perspective — the note is the
-    // hub that sees all terminals. Exclude the orchestrator itself (it's the
-    // one receiving the AI response, not a subordinate).
-    const subordinates: ConnectedNodeInfo[] = targets
-      .filter((n) => n.type === "terminal" && n.id !== orchestrator.id)
+    // ALL connected terminals — no orchestrator election. The backend is
+    // the brain: it calls the AI and dispatches directly to each PTY.
+    const allTerminals: ConnectedNodeInfo[] = targets
+      .filter((n) => n.type === "terminal")
       .map((n) => {
         const d = n.data as TerminalNodeData;
         return {
@@ -153,24 +132,23 @@ function NoteNode({ id, data, selected }: NodeProps) {
       })
       .filter((info) => !!info.ptyId);
 
-    console.log("[NoteNode] 3b. Subordinados montados:", subordinates.map((s) => s.label));
+    console.log("[NoteNode] 3. Terminais conectados:", allTerminals.map((t) => t.label));
+
+    if (allTerminals.length === 0) {
+      console.warn("[NoteNode] Nenhum terminal ativo entre os vizinhos.");
+      setExecStatus("error");
+      setExecError("Nenhum terminal ativo");
+      setTimeout(() => { setExecStatus("idle"); setExecError(null); }, 2500);
+      return;
+    }
 
     setExecStatus("sending");
     setExecError(null);
     setEdgeStatus("translating");
 
-    // Pass subordinates directly — no need for useTranslator to rediscover
-    // from the orchestrator's edges (the note is the hub, not the orchestrator).
-    console.log(`[NoteNode] 4. Chamando translate_and_inject -> orquestrador ${orchestrator.id} (pty ${termData.ptyId}), subordinados: ${subordinates.length}`);
+    console.log(`[NoteNode] 4. Chamando translate_and_inject com ${allTerminals.length} terminais`);
     try {
-      const result = await translate(
-        trimmed,
-        termData.ptyId,
-        termData.cwd ?? "",
-        termData.role ?? "Agent",
-        orchestrator.id,
-        subordinates,
-      );
+      const result = await translate(trimmed, allTerminals);
 
       if (result) {
         console.log(`[NoteNode] 5. Tradução OK (${result.provider}/${result.model}):`, result.command);

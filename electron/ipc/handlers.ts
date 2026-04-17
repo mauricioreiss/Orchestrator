@@ -182,24 +182,17 @@ export function registerIpcHandlers(services: Services): void {
       _e,
       args: {
         noteContent: string;
-        ptyId: string;
-        cwd: string;
-        role: string;
-        connectedNodes?: ConnectedNodeInfo[];
+        connectedNodes: ConnectedNodeInfo[];
       },
     ) => {
       log.info(
-        `[Backend] Recebido pedido de IA do NoteNode: ptyId=${args.ptyId}, connectedNodes=${(args.connectedNodes ?? []).length}`,
+        `[Backend] Recebido pedido de IA: targets=${args.connectedNodes.length}`,
       );
       return translator.translateAndInject(
         args.noteContent,
-        args.ptyId,
-        args.cwd,
-        args.role,
-        args.connectedNodes ?? [],
+        args.connectedNodes,
         persistence,
         pty,
-        context,
         getWindow(),
       );
     },

@@ -1,11 +1,8 @@
-import fs from "fs";
-import path from "path";
 import type { BrowserWindow } from "electron";
 import type { PtyService } from "./PtyService";
 import type { PersistenceService } from "./PersistenceService";
-import type { ContextService } from "./ContextService";
 import log from "../log";
-import type { TranslateResult, CanvasGraph, ConnectedNodeInfo } from "../types";
+import type { TranslateResult, ConnectedNodeInfo } from "../types";
 
 // ---------------------------------------------------------------------------
 // Provider config
@@ -23,62 +20,32 @@ function parseProvider(s: string | null): AiProvider {
 }
 
 // ---------------------------------------------------------------------------
-// Navigation patterns for local intercept (pt-BR + en)
-// ---------------------------------------------------------------------------
-
-/** Raw cd command: cd <target> */
-const CD_RE = /^cd\s+(.+)$/i;
-
-/** Natural language navigation patterns */
-const NAV_RE =
-  /^(?:acesse|entre\s+na\s+pasta|vai\s+para|va\s+para|abra|open|navigate\s+to|go\s+to)\s+(?:a\s+pasta\s+|o\s+diretorio\s+|a\s+)?(.+)$/i;
-
-// ---------------------------------------------------------------------------
 // TranslatorService
 //
-// AI-powered translation of natural language notes to shell commands.
-// Local intercept catches navigation patterns without any API call.
-// Falls back to OpenAI or Anthropic for general command translation.
+// Backend brain: receives natural language from NoteNode, calls AI API,
+// parses SEND_TO tags, dispatches commands directly to target PTYs.
 // ---------------------------------------------------------------------------
 
 export class TranslatorService {
   /**
-   * Translate a note's content into a shell command and inject it into the PTY.
+   * Backend brain: call AI, parse SEND_TO tags, dispatch directly to PTYs.
    *
    * Flow:
-   * 1. Try local intercept (fuzzy navigation) -- zero token cost
-   * 2. Read AI provider settings from SQLite
-   * 3. Call AI API to translate note -> command
-   * 4. Sanitize LLM output (strip code fences, prompts)
-   * 5. Write the command + \r\n to the target PTY
-   * 6. Emit context-injection event to renderer
-   * 7. Return the translated command to frontend
+   * 1. Read AI provider settings from SQLite
+   * 2. Build orchestrator prompt with ALL connected terminals
+   * 3. Call AI API
+   * 4. Sanitize + parse SEND_TO tags
+   * 5. For each tag, write the command directly to the target PTY
+   * 6. Return result to frontend
    */
   async translateAndInject(
     noteContent: string,
-    ptyId: string,
-    cwd: string,
-    role: string,
     connectedNodes: ConnectedNodeInfo[],
     persistence: PersistenceService,
     pty: PtyService,
-    context: ContextService,
     window: BrowserWindow | null,
   ): Promise<TranslateResult> {
-    // 1. Try local intercept before calling LLM
-    const localCmd = tryLocalIntercept(noteContent, cwd);
-    if (localCmd) {
-      log.info(`[orchestrated-space] Local intercept: ${localCmd}`);
-      pty.write(ptyId, Array.from(Buffer.from(`${localCmd}\r\n`, "utf-8")));
-
-      // Emit context-injection for the renderer to show the command
-      const formatted = formatTranslation(localCmd, "local", "fuzzy-nav");
-      window?.webContents.send(`context-injection-${ptyId}`, formatted);
-
-      return { command: localCmd, provider: "local", model: "fuzzy-nav" };
-    }
-
-    // 2. Read settings from persistence
+    // 1. Read settings from persistence
     const providerStr = persistence.getSetting("translator_provider");
     const apiKey = persistence.getSetting("translator_api_key");
     const modelSetting = persistence.getSetting("translator_model");
@@ -93,77 +60,66 @@ export class TranslatorService {
     const modelName = modelSetting || DEFAULT_MODELS[provider];
 
     log.info(
-      `[orchestrated-space] translate_and_inject: provider=${provider}, model=${modelName}, pty=${ptyId}`,
+      `[orchestrated-space] translate_and_inject: provider=${provider}, model=${modelName}, targets=${connectedNodes.length}`,
     );
 
-    // 3. Call AI API (with FRESH graph context from frontend)
-    //    connectedNodes comes from Zustand state at IPC call time — no
-    //    staleness from the debounced sync_canvas snapshot.
-    const graph = context.getLastGraph();
-    const systemPrompt = connectedNodes.length > 0
-      ? buildOrchestratorPrompt(cwd, role, connectedNodes)
-      : buildSystemPrompt(cwd, role, buildSwarmContext(ptyId, graph));
+    // 2. Build orchestrator prompt with ALL targets
+    const cwd = connectedNodes[0]?.cwd ?? process.cwd();
+    const systemPrompt = buildOrchestratorPrompt(cwd, "Tech Lead", connectedNodes);
     let rawCommand: string;
 
+    // 3. Call AI API
     if (provider === "openai") {
       rawCommand = await callOpenAI(apiKey, modelName, systemPrompt, noteContent);
     } else {
       rawCommand = await callAnthropic(apiKey, modelName, systemPrompt, noteContent);
     }
 
-    log.info(`[orchestrated-space] Translated command (raw): ${rawCommand}`);
+    log.info(`[orchestrated-space] AI raw response: ${rawCommand}`);
 
     // 4. Sanitize LLM output
     const clean = sanitizeLlmCommand(rawCommand);
-    log.info(`[orchestrated-space] Sanitized command: ${clean}`);
+    log.info(`[orchestrated-space] Sanitized: ${clean}`);
 
-    // 5. Guard: in orchestrator mode, reject responses without SEND_TO tags.
-    //    This prevents AI chatter/errors from being injected into terminals.
-    const hasSendTo = /<<SEND_TO:.+?>>/m.test(clean);
-    if (connectedNodes.length > 0 && !hasSendTo) {
-      log.warn(
-        `[orchestrated-space] Resposta da IA descartada por falta de tag de roteamento: "${clean}"`,
-      );
-      return { command: clean, provider, model: modelName };
+    // 5. Parse SEND_TO tags and dispatch directly to target PTYs
+    const SEND_TO_RE = /<<SEND_TO:([^>\r\n]+?)>>\s*([^\r\n]+)/g;
+    let dispatched = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = SEND_TO_RE.exec(clean)) !== null) {
+      const targetLabel = match[1].trim();
+      const command = match[2].trim();
+
+      const target = connectedNodes.find((n) => n.label === targetLabel);
+      if (target?.ptyId) {
+        try {
+          pty.writeString(target.ptyId, command + "\r");
+          dispatched++;
+          log.info(`[orchestrated-space] Dispatched to "${targetLabel}": ${command}`);
+
+          // Visual feedback for frontend edge flash
+          window?.webContents.send("swarm-dispatch", {
+            targetPtyId: target.ptyId,
+            targetLabel,
+            command,
+          });
+        } catch {
+          log.warn(`[orchestrated-space] Failed to write to PTY ${target.ptyId}`);
+        }
+      } else {
+        log.warn(`[orchestrated-space] Target "${targetLabel}" not found in connected nodes`);
+      }
     }
 
-    // 6. Smart Write — intercepts <<SEND_TO:...>> and routes to target PTYs
-    const swResult = pty.smartWrite(ptyId, clean, graph, window);
-    if (swResult.dispatched > 0) {
-      log.info(`[orchestrated-space] Swarm routed ${swResult.dispatched} command(s)`);
+    // 6. Silence: if no tags found, just log — never inject garbage
+    if (dispatched === 0) {
+      log.warn(`[orchestrated-space] Resposta da IA sem tags SEND_TO, descartada: "${clean}"`);
+    } else {
+      log.info(`[orchestrated-space] Dispatched ${dispatched} command(s)`);
     }
-
-    // 7. Emit context-injection event (show what the AI generated)
-    const formatted = formatTranslation(clean, provider, modelName);
-    window?.webContents.send(`context-injection-${ptyId}`, formatted);
 
     return { command: clean, provider, model: modelName };
   }
-}
-
-// ---------------------------------------------------------------------------
-// System prompt builder
-// ---------------------------------------------------------------------------
-
-function buildSystemPrompt(cwd: string, role: string, swarmContext: string): string {
-  const osName = process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux";
-  const shell = process.platform === "win32" ? "PowerShell" : "bash";
-
-  let prompt =
-    `You are a terminal command translator for Orchestrated Space orchestrator.\n` +
-    `OS: ${osName}, Shell: ${shell}\n` +
-    `Current directory: ${cwd}\n` +
-    `Terminal role: ${role}\n\n` +
-    `Translate the user's intent into a valid terminal command.\n` +
-    `Return ONLY the command, no explanation, no markdown, no backticks.\n` +
-    `If multiple commands needed, chain with ;\n` +
-    `If intent is unclear, return the closest interpretation.`;
-
-  if (swarmContext) {
-    prompt += "\n\n" + swarmContext;
-  }
-
-  return prompt;
 }
 
 /**
@@ -202,55 +158,6 @@ function buildOrchestratorPrompt(
     `Os nomes dos agentes são EXATAMENTE: ${labelList}. Use esses nomes exatos nas tags.\n\n` +
     `Ambiente: ${osName} / ${shell}, cwd: ${cwd}. Papel: ${role}.\n` +
     `Detalhes da equipe:\n${detailList}`
-  );
-}
-
-/**
- * Build swarm context string for the AI system prompt.
- * Lists all terminal neighbors so the AI knows who it can send commands to.
- */
-function buildSwarmContext(ptyId: string, graph: CanvasGraph | null): string {
-  if (!graph) return "";
-
-  // Find source node
-  const sourceNode = graph.nodes.find(
-    (n) => n.type === "terminal" && n.data?.ptyId === ptyId,
-  );
-  if (!sourceNode) return "";
-
-  const sourceLabel = (typeof sourceNode.data?.label === "string")
-    ? sourceNode.data.label
-    : "Terminal";
-
-  // Find all neighbors via bidirectional edges
-  const neighborIds = new Set<string>();
-  for (const edge of graph.edges) {
-    if (edge.source === sourceNode.id) neighborIds.add(edge.target);
-    if (edge.target === sourceNode.id) neighborIds.add(edge.source);
-  }
-
-  // Collect terminal neighbors with their metadata
-  const neighbors: string[] = [];
-  for (const nId of neighborIds) {
-    const node = graph.nodes.find((n) => n.id === nId);
-    if (!node || node.type !== "terminal") continue;
-
-    const label = typeof node.data?.label === "string" ? node.data.label : "Terminal";
-    const cwd = typeof node.data?.cwd === "string" ? node.data.cwd : "unknown";
-    neighbors.push(`- "${label}" (terminal, cwd: ${cwd})`);
-  }
-
-  if (neighbors.length === 0) return "";
-
-  return (
-    `SWARM CONTEXT:\n` +
-    `You are the terminal "${sourceLabel}".\n` +
-    `Connected terminals:\n` +
-    neighbors.join("\n") + "\n\n" +
-    `To execute commands on connected terminals, respond with EXACTLY:\n` +
-    `<<SEND_TO:NodeName>> command\n` +
-    `Write the tag on a separate line. No markdown code blocks around it.\n` +
-    `You may combine local commands with SEND_TO lines (one per line).`
   );
 }
 
@@ -404,126 +311,3 @@ function sanitizeLlmCommand(raw: string): string {
   return otherLines.join("\n") || s.trim();
 }
 
-// ---------------------------------------------------------------------------
-// Local intercept: fuzzy navigation
-// ---------------------------------------------------------------------------
-
-function tryLocalIntercept(content: string, cwd: string): string | null {
-  const trimmed = content.trim();
-
-  // If already a raw cd command, process it
-  const cdMatch = CD_RE.exec(trimmed);
-  if (cdMatch) {
-    const target = cdMatch[1].trim().replace(/^"|"$/g, "");
-
-    // Absolute path, .., or drive letter: pass through directly
-    if (
-      target.startsWith("/") ||
-      target.startsWith("\\") ||
-      target.includes(":") ||
-      target === ".." ||
-      target.startsWith("..")
-    ) {
-      return `cd "${target}"`;
-    }
-
-    // Try fuzzy match on relative target
-    return fuzzyResolveDir(cwd, target);
-  }
-
-  // Natural language navigation patterns
-  const navMatch = NAV_RE.exec(trimmed);
-  if (navMatch) {
-    const target = navMatch[1].trim().replace(/^"|"$/g, "");
-    return fuzzyResolveDir(cwd, target);
-  }
-
-  return null;
-}
-
-/**
- * Fuzzy-match a target name against directories in cwd.
- * Returns `cd "resolved_name"` if a good match is found, null otherwise.
- *
- * Uses simple substring + Levenshtein distance scoring since we don't have
- * the Rust skim fuzzy matcher in Node.js. The scoring is tuned to match
- * the Rust version's behavior: exact matches score highest, substring
- * matches next, then fuzzy.
- */
-function fuzzyResolveDir(cwd: string, target: string): string | null {
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(cwd, { withFileTypes: true });
-  } catch {
-    return null;
-  }
-
-  const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
-  if (dirs.length === 0) return null;
-
-  const lowerTarget = target.toLowerCase();
-
-  let bestScore = 0;
-  let bestName = "";
-
-  for (const name of dirs) {
-    const lowerName = name.toLowerCase();
-    let score = 0;
-
-    // Exact match (case insensitive)
-    if (lowerName === lowerTarget) {
-      score = 1000;
-    }
-    // Starts with target
-    else if (lowerName.startsWith(lowerTarget)) {
-      score = 500 + (lowerTarget.length / lowerName.length) * 100;
-    }
-    // Contains target as substring
-    else if (lowerName.includes(lowerTarget)) {
-      score = 200 + (lowerTarget.length / lowerName.length) * 100;
-    }
-    // Target contains name (e.g., target="components" matches "comp")
-    else if (lowerTarget.includes(lowerName)) {
-      score = 100 + (lowerName.length / lowerTarget.length) * 50;
-    }
-    // Fuzzy: check if all chars of target appear in order in name
-    else {
-      let ti = 0;
-      let matched = 0;
-      for (let ni = 0; ni < lowerName.length && ti < lowerTarget.length; ni++) {
-        if (lowerName[ni] === lowerTarget[ti]) {
-          matched++;
-          ti++;
-        }
-      }
-      if (ti === lowerTarget.length) {
-        // All chars matched in order
-        score = 20 + (matched / lowerName.length) * 30;
-      }
-    }
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestName = name;
-    }
-  }
-
-  // Minimum threshold to avoid false positives (mirrors Rust's score >= 20)
-  if (bestScore >= 20 && bestName) {
-    return `cd "${bestName}"`;
-  }
-
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// ANSI format for context-injection event
-// ---------------------------------------------------------------------------
-
-function formatTranslation(command: string, provider: string, model: string): string {
-  return (
-    `\r\n\x1b[1;36m[Maestro Translator]\x1b[0m ` +
-    `\x1b[90m(${provider}/${model})\x1b[0m\r\n` +
-    `\x1b[1;37m> ${command}\x1b[0m\r\n`
-  );
-}

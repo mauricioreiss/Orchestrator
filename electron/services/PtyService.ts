@@ -248,6 +248,13 @@ export class PtyService {
     instance.process.write(buf.toString("utf-8"));
   }
 
+  /** Write a raw string directly to a PTY's stdin. Single atomic call. */
+  writeString(id: string, text: string): void {
+    const instance = this.instances.get(id);
+    if (!instance) throw new Error(`PTY ${id} not found`);
+    instance.process.write(text);
+  }
+
   // -----------------------------------------------------------------------
   // Resize
   // -----------------------------------------------------------------------
