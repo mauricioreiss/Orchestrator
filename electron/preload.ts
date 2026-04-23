@@ -10,6 +10,8 @@ const ALLOWED_INVOKE_CHANNELS = [
   "list_vault_files", "read_vault_file", "search_vault", "search_vault_content",
   "save_canvas", "load_canvas", "list_canvases", "delete_canvas",
   "get_setting", "set_setting", "get_all_settings",
+  "get_secure_setting", "set_secure_setting",
+  "has_master_password", "set_master_password", "verify_master_password",
   "translate_and_inject",
   "start_proxy", "stop_proxy", "list_proxies",
   "get_system_metrics",
@@ -21,11 +23,12 @@ const ALLOWED_INVOKE_CHANNELS = [
   "persona_generate_dossier",
   "dialog:save",
   "fs_write_file",
+  "send_notification",
 ] as const;
 
 type AllowedChannel = typeof ALLOWED_INVOKE_CHANNELS[number];
 
-const ALLOWED_EVENT_PREFIXES = ["pty-output-", "pty-exit-", "context-injection-", "pty-broadcast", "agent-approval", "swarm-dispatch"];
+const ALLOWED_EVENT_PREFIXES = ["pty-output-", "pty-exit-", "context-injection-", "pty-broadcast", "agent-approval", "swarm-dispatch", "pty-permission-", "pty-status-"];
 
 contextBridge.exposeInMainWorld("maestriAPI", {
   invoke: (channel: string, args?: Record<string, unknown>) => {

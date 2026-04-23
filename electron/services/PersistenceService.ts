@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import { safeStorage } from "electron";
 import type { SavedCanvas, CanvasSummary } from "../types";
 
 /**
@@ -106,6 +107,34 @@ export class PersistenceService {
   /** Set a setting value (upsert). */
   setSetting(key: string, value: string): void {
     this.stmtSetSetting.run({ key, value });
+  }
+
+  /** Store a setting encrypted with OS keychain via safeStorage. */
+  setSecureSetting(key: string, plainValue: string): void {
+    if (!safeStorage.isEncryptionAvailable()) {
+      this.stmtSetSetting.run({ key, value: plainValue });
+      return;
+    }
+    const encrypted = safeStorage.encryptString(plainValue);
+    const base64 = encrypted.toString("base64");
+    this.stmtSetSetting.run({ key, value: `enc:${base64}` });
+  }
+
+  /** Read a setting and decrypt if it was encrypted with safeStorage. */
+  getSecureSetting(key: string): string | null {
+    const row = this.stmtGetSetting.get({ key }) as
+      | { value: string }
+      | undefined;
+    if (!row) return null;
+
+    if (row.value.startsWith("enc:")) {
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error("Encrypted setting found but OS keychain unavailable");
+      }
+      return safeStorage.decryptString(Buffer.from(row.value.slice(4), "base64"));
+    }
+
+    return row.value;
   }
 
   /** Get all settings as [key, value] tuples, ordered by key. */

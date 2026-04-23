@@ -34,6 +34,7 @@ import NodeErrorBoundary from "./nodes/NodeErrorBoundary";
 import FlowEdge from "./edges/FlowEdge";
 import StatusBar from "./StatusBar";
 import ProjectNavigator from "./ProjectNavigator";
+import GlobalStatusHUD from "./GlobalStatusHUD";
 import { useCanvasSync } from "../hooks/useCanvasSync";
 import { useHibernation } from "../hooks/useHibernation";
 import { useViewportCulling } from "../hooks/useViewportCulling";
@@ -259,6 +260,10 @@ export default function Canvas() {
 
         <Panel position="top-right">
           <ProjectNavigator />
+        </Panel>
+
+        <Panel position="bottom-left">
+          <GlobalStatusHUD />
         </Panel>
 
         <Background

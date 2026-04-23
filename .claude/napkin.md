@@ -6,10 +6,10 @@ Canvas infinito (estilo n8n/Raycast) onde VS Code, Terminais PTY, Browsers e Not
 Renomeado: Shark Canvas → Maestri-X → Orchestrated Space (2026-04-15).
 Nomes internos preservados: maestriAPI, %APPDATA%/maestri-x/, maestri-x.db.
 
-## STACK ATUAL (2026-04-17)
+## STACK ATUAL (2026-04-23)
 - **Backend**: Electron main process (Node.js/TypeScript), 11 services
 - **Frontend**: React 18 + TypeScript + Vite
-- **Canvas**: React Flow 12.6 (12 node types, circuit routing edges)
+- **Canvas**: React Flow 12.6 (13 node types, circuit routing edges)
 - **State**: Zustand + SQLite (better-sqlite3), auto-save 2s debounce
 - **Terminais**: xterm.js + node-pty (useConpty: true)
 - **UI**: Tailwind + Glassmorphism + Inter/JetBrains Mono
@@ -25,7 +25,7 @@ Nomes internos preservados: maestriAPI, %APPDATA%/maestri-x/, maestri-x.db.
 
 ### Backend (electron/)
 10 services em `electron/services/`, 38 IPC handlers em `electron/ipc/handlers.ts`
-- PtyService: node-pty + 8KB ring buffer + 16ms coalesce + writeString() atomic write
+- PtyService: node-pty + 8KB ring buffer + 16ms coalesce + writeString() atomic write + status detection (active/awaiting_approval/idle) + native notifications
 - PersistenceService: better-sqlite3 WAL mode, prepared statements
 - ContextService: Maestro Bus (graph diff, action dispatch)
 - CodeServerService: VS Code serve-web spawn, TCP readiness, tree-kill cleanup
@@ -36,10 +36,11 @@ Nomes internos preservados: maestriAPI, %APPDATA%/maestri-x/, maestri-x.db.
 - FileSystemService: stateless FS reader, safeResolve, 1MB limit
 
 ### Frontend (src/)
-- Zustand store: `src/store/canvasStore.ts` (14 addNode helpers, all accept optional position)
+- Zustand store: `src/store/canvasStore.ts` (13 addNode helpers, all accept optional position)
 - Auth gate: `src/store/authStore.ts` (sessionStorage, UI-only)
 - Custom hooks: `src/hooks/use*.ts` (useCwdCascade, useSwarmRouter, usePty, etc.)
-- 13 node types: terminal, note, vscode, obsidian, browser, kanban, api, db, monaco, workspace, markdown, architect, group
+- 12 node types registered: terminal, note, vscode, obsidian, browser, kanban, api, db, monaco, markdown, architect, group
+- GlobalStatusHUD: fixed Panel (bottom-left), groups terminals by cwd, status animations, setCenter navigation
 - Command Palette: cmdk, Ctrl+K/Cmd+K
 - Edge validation: magnetic (any-to-any except self-loops)
 - All nodes: 4 universal handles (Top/Bottom/Left/Right) with unique IDs
@@ -109,8 +110,20 @@ npm run electron:rebuild                   # Rebuild native addons
 - Multi-Agent Personas (2026-04-23): Architect generates SEPARATE persona files per domain (frontend_persona.md, backend_persona.md). XML `<file name="...">` tags parsed by regex. Batch save to cwd. Individual ignition prompts per terminal. System prompt teaches domain separation to avoid hallucinations. maxTokens bumped 4000→8000
 - Auto-Ignicao (2026-04-23): Agent button in TerminalNode boots Claude CLI + injects persona prompt after 4s delay. Label→filename: "Frontend" → "frontend_persona.md". Split write (text + 50ms \x0D) for CLI raw mode. State machine: idle→booting→injecting→ready. Toast feedback + animated button states
 
+- OWASP Security (2026-04-23): safeStorage encryption for API keys (enc: prefix, DPAPI on Windows), PTY command sanitizer (10 blocked patterns, AI dispatch only), enableRemoteModule removed (Electron 41 default)
+- Login Futurista (2026-04-23): Master Password (SHA-256 hash in SQLite), create/unlock flow, animated gradient background (CSS keyframes), glassmorphism card, AnimatePresence portal transition (login→canvas), WorkspaceContent component extracted from App.tsx
+- UI Consistency (2026-04-23): Terminal font→JetBrains Mono Variable, VS Code dark theme forced via Machine/settings.json (ensureDefaultSettings in CodeServerService), SettingsModal rebranded "AI Provider Settings"
+
+- Terminal Status Monitor (2026-04-23): PTY status detection (active/awaiting_approval/idle), 6 AWAITING_PATTERNS regex, 5s idle timer, pty-status-${ptyId} IPC event
+- Visual Feedback (2026-04-23): TerminalNode dynamic border (yellow pulse for approval, green glow for idle), status indicator badges, toast notifications
+- GlobalStatusHUD (2026-04-23): Replaced GlobalMonitorNode canvas node with fixed Panel (bottom-left). Groups terminals by cwd (last folder name). Status dots: blue pulse (active), red blink (approval), grey (idle). Click-to-navigate via setCenter(zoom:1.2, 800ms). Collapsible. Alert badge count in header.
+- Native Notifications (2026-04-23): Electron Notification API when window unfocused, "Tarefa Concluida"/"Aprovacao Necessaria" alerts
+- CWD Cascade Bidirecional (2026-04-23): useCwdCascade now cascades in both edge directions (forward + reverse)
+- Status Reset on Input (2026-04-23): PtyService.write/writeString reset status to active immediately on user keystroke
+- NoteNode Multi-Hop (2026-04-23): Note→VSCode→Terminal topology supported, terminal inherits VS Code's workspacePath
+- Smart Spawn (2026-04-23): Nodes spawn at viewport center with collision avoidance. viewportCenter() converts screen→flow coords, findOpenPosition() cascades +40/+40 per overlap (50px tolerance, max 20 iterations). All 13 addNode helpers updated. Monaco also uses smartSpawn (no position param).
+
 ## NEXT UP
-- **QA: Delayed Enter dispatch (2026-04-21)**: Testar se o `\x0D` com 50ms delay executa no Claude Code CLI. Se não funcionar, tentar: aumentar delay (100-200ms), usar `\n` em vez de `\x0D`, ou sequência `\x0D\x0A`
 - Manual QA: test all features end-to-end after all fixes
 - Package .exe installer (electron-builder)
 - Workspace Tabs: multi-project tabs with per-tab canvas isolation

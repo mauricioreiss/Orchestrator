@@ -61,6 +61,60 @@ interface CanvasStore {
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let savedResetTimer: ReturnType<typeof setTimeout> | null = null;
 
+// ---------- Smart Spawn ----------
+const COLLISION_TOLERANCE = 50;
+const CASCADE_OFFSET = 40;
+const MAX_CASCADE = 20;
+
+/** Convert viewport center (screen pixels) to flow coordinates */
+function viewportCenter(viewport: Viewport): { x: number; y: number } {
+  const screenW = typeof window !== "undefined" ? window.innerWidth : 1920;
+  const screenH = typeof window !== "undefined" ? window.innerHeight : 1080;
+  return {
+    x: (screenW / 2 - viewport.x) / viewport.zoom,
+    y: (screenH / 2 - viewport.y) / viewport.zoom,
+  };
+}
+
+/** Find a position free of collisions, cascading +40/+40 per overlap */
+function findOpenPosition(
+  nodes: Node[],
+  base: { x: number; y: number },
+  nodeW: number,
+  nodeH: number,
+): { x: number; y: number } {
+  let pos = { ...base };
+  for (let i = 0; i < MAX_CASCADE; i++) {
+    const collision = nodes.some((n) => {
+      const nw = (n.style?.width as number) ?? 300;
+      const nh = (n.style?.height as number) ?? 200;
+      const overlapX =
+        pos.x < n.position.x + nw + COLLISION_TOLERANCE &&
+        pos.x + nodeW > n.position.x - COLLISION_TOLERANCE;
+      const overlapY =
+        pos.y < n.position.y + nh + COLLISION_TOLERANCE &&
+        pos.y + nodeH > n.position.y - COLLISION_TOLERANCE;
+      return overlapX && overlapY;
+    });
+    if (!collision) return pos;
+    pos = { x: pos.x + CASCADE_OFFSET, y: pos.y + CASCADE_OFFSET };
+  }
+  return pos;
+}
+
+/** Compute smart spawn position: viewport center, offset for node size, collision-free */
+function smartSpawn(
+  nodes: Node[],
+  viewport: Viewport,
+  nodeW: number,
+  nodeH: number,
+): { x: number; y: number } {
+  const center = viewportCenter(viewport);
+  // Offset so node CENTER aligns with viewport center
+  const base = { x: center.x - nodeW / 2, y: center.y - nodeH / 2 };
+  return findOpenPosition(nodes, base, nodeW, nodeH);
+}
+
 function scheduleSave() {
   if (saveTimer) clearTimeout(saveTimer);
   if (savedResetTimer) clearTimeout(savedResetTimer);
@@ -153,82 +207,89 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
 
   addTerminalNode: (position?) => {
+    const W = 520, H = 360;
     const count = get().nodes.filter((n) => n.type === "terminal").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "terminal",
-      position: position ?? { x: 100 + Math.random() * 600, y: 100 + Math.random() * 400 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "terminal", label: `Terminal ${count}`, role: "Agent" },
-      style: { width: 520, height: 360 },
+      style: { width: W, height: H },
     });
   },
 
   addNoteNode: (position?) => {
+    const W = 350, H = 250;
     const count = get().nodes.filter((n) => n.type === "note").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "note",
-      position: position ?? { x: 50 + Math.random() * 400, y: 50 + Math.random() * 300 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "note", label: `Note ${count}`, content: "", priority: 1, commandMode: false },
-      style: { width: 350, height: 250 },
+      style: { width: W, height: H },
     });
   },
 
   addVSCodeNode: (position?) => {
+    const W = 700, H = 500;
     const count = get().nodes.filter((n) => n.type === "vscode").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "vscode",
-      position: position ?? { x: 50 + Math.random() * 300, y: 50 + Math.random() * 200 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "vscode", label: `VS Code ${count}`, workspacePath: "" },
-      style: { width: 700, height: 500 },
+      style: { width: W, height: H },
     });
   },
 
   addObsidianNode: (position?) => {
+    const W = 380, H = 400;
     const count = get().nodes.filter((n) => n.type === "obsidian").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "obsidian",
-      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "obsidian", label: `Vault ${count}`, vaultPath: "" },
-      style: { width: 380, height: 400 },
+      style: { width: W, height: H },
     });
   },
 
   addBrowserNode: (position?) => {
+    const W = 800, H = 600;
     const count = get().nodes.filter((n) => n.type === "browser").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "browser",
-      position: position ?? { x: 60 + Math.random() * 400, y: 60 + Math.random() * 300 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "browser", label: `Browser ${count}`, url: "" },
-      style: { width: 800, height: 600 },
+      style: { width: W, height: H },
     });
   },
 
   addKanbanNode: (position?) => {
+    const W = 400, H = 400;
     const count = get().nodes.filter((n) => n.type === "kanban").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "kanban",
-      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: {
         type: "kanban",
         label: `Tasks ${count}`,
         columns: [],
         tasks: [],
       },
-      style: { width: 400, height: 400 },
+      style: { width: W, height: H },
     });
   },
 
   addApiNode: (position?) => {
+    const W = 450, H = 500;
     const count = get().nodes.filter((n) => n.type === "api").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "api",
-      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: {
         type: "api",
         label: `API ${count}`,
@@ -237,59 +298,64 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         body: "",
         headers: [],
       },
-      style: { width: 450, height: 500 },
+      style: { width: W, height: H },
     });
   },
 
   addDbNode: (position?) => {
+    const W = 550, H = 400;
     const count = get().nodes.filter((n) => n.type === "db").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "db",
-      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: {
         type: "db",
         label: `Database ${count}`,
         query: "SELECT * FROM users LIMIT 10;",
       },
-      style: { width: 550, height: 400 },
+      style: { width: W, height: H },
     });
   },
 
   addGroupNode: (position?) => {
+    const W = 1200, H = 800;
     const count = get().nodes.filter((n) => n.type === "group").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "group",
-      position: position ?? { x: 50 + Math.random() * 200, y: 50 + Math.random() * 200 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "group", label: `Project ${count}`, color: "#3b82f6" },
-      style: { width: 1200, height: 800, zIndex: -1 },
+      style: { width: W, height: H, zIndex: -1 },
     });
   },
 
   addMarkdownNode: (position?) => {
+    const W = 500, H = 400;
     const count = get().nodes.filter((n) => n.type === "markdown").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "markdown",
-      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "markdown", label: `Markdown ${count}`, content: "" },
-      style: { width: 500, height: 400 },
+      style: { width: W, height: H },
     });
   },
 
   addArchitectNode: (position?) => {
+    const W = 400, H = 500;
     const count = get().nodes.filter((n) => n.type === "architect").length + 1;
     get().addNode({
       id: crypto.randomUUID(),
       type: "architect",
-      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "architect", label: `Architect ${count}` },
-      style: { width: 400, height: 500 },
+      style: { width: W, height: H },
     });
   },
 
   addMonacoNode: (filePath: string, rootDir: string) => {
+    const W = 600, H = 450;
     const fileName = filePath.split(/[\\/]/).pop() ?? "untitled";
     const ext = fileName.includes(".") ? (fileName.split(".").pop()?.toLowerCase() ?? "") : "";
     const langMap: Record<string, string> = {
@@ -303,9 +369,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     get().addNode({
       id: crypto.randomUUID(),
       type: "monaco",
-      position: { x: 200 + Math.random() * 400, y: 100 + Math.random() * 300 },
+      position: smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "monaco", label: fileName, filePath, rootDir, language },
-      style: { width: 600, height: 450 },
+      style: { width: W, height: H },
     });
   },
 

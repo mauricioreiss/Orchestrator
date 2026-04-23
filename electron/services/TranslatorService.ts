@@ -47,7 +47,7 @@ export class TranslatorService {
   ): Promise<TranslateResult> {
     // 1. Read settings from persistence
     const providerStr = persistence.getSetting("translator_provider");
-    const apiKey = persistence.getSetting("translator_api_key");
+    const apiKey = persistence.getSecureSetting("translator_api_key");
     const modelSetting = persistence.getSetting("translator_model");
 
     if (!apiKey) {
@@ -90,12 +90,13 @@ export class TranslatorService {
       const targetLabel = match[1].trim();
       const command = match[2].trim();
 
-      const target = connectedNodes.find((n) => n.label === targetLabel);
+      const targetLower = targetLabel.toLowerCase();
+      const target = connectedNodes.find((n) => n.label.toLowerCase() === targetLower);
       if (target?.ptyId) {
         try {
           const cleanCommand = command.trim();
           const ptyId = target.ptyId;
-          pty.writeString(ptyId, cleanCommand);
+          if (!pty.writeStringSafe(ptyId, cleanCommand)) continue;
           setTimeout(() => {
             try { pty.writeString(ptyId, "\x0D"); } catch { /* PTY may be dead */ }
           }, 50);

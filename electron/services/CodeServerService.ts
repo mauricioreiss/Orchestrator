@@ -436,6 +436,7 @@ export class CodeServerService {
       os.tmpdir(),
       `maestri-x-vscode-${port}`,
     );
+    this.ensureDefaultSettings(userDataDir);
 
     log.info(
       `[orchestrated-space] spawn Code.exe directly: ELECTRON_RUN_AS_NODE=1 "${codeExe}" "${cliJs}" serve-web --host 127.0.0.1 --port ${port}`,
@@ -455,7 +456,6 @@ export class CodeServerService {
           userDataDir,
           "--without-connection-token",
           "--accept-server-license-terms",
-          "--disable-telemetry",
         ],
         {
           env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
@@ -485,6 +485,7 @@ export class CodeServerService {
       os.tmpdir(),
       `maestri-x-vscode-${port}`,
     );
+    this.ensureDefaultSettings(userDataDir);
 
     const args = [
       "serve-web",
@@ -496,7 +497,6 @@ export class CodeServerService {
       userDataDir,
       "--without-connection-token",
       "--accept-server-license-terms",
-      "--disable-telemetry",
     ];
 
     log.info(
@@ -530,6 +530,29 @@ export class CodeServerService {
   // connection. This blocks the main thread briefly (up to 500ms) but
   // matches the Rust behavior and keeps status() synchronous.
   // -----------------------------------------------------------------------
+
+  /**
+   * Write default VS Code settings.json to server-data-dir before spawn.
+   * Forces dark theme and consistent font. Skips if file already exists.
+   */
+  private ensureDefaultSettings(userDataDir: string): void {
+    const settingsDir = path.join(userDataDir, "data", "Machine");
+    const settingsFile = path.join(settingsDir, "settings.json");
+    if (fs.existsSync(settingsFile)) return;
+    try {
+      fs.mkdirSync(settingsDir, { recursive: true });
+      const defaults = {
+        "workbench.colorTheme": "Default Dark Modern",
+        "editor.fontFamily": "'JetBrains Mono Variable', 'JetBrains Mono', monospace",
+        "editor.fontSize": 13,
+        "terminal.integrated.fontFamily": "'JetBrains Mono Variable', 'JetBrains Mono', monospace",
+      };
+      fs.writeFileSync(settingsFile, JSON.stringify(defaults, null, 2), "utf-8");
+      log.info(`[orchestrated-space] Wrote VS Code default settings: ${settingsFile}`);
+    } catch (e) {
+      log.warn(`[orchestrated-space] Failed to write VS Code settings: ${e}`);
+    }
+  }
 
   private tcpCheck(port: number): boolean {
     try {

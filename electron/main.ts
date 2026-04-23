@@ -1,3 +1,6 @@
+// Suppress Node.js v24+ deprecation warnings (e.g. navigator global)
+process.env.NODE_NO_WARNINGS = "1";
+
 import { app, BrowserWindow, ipcMain, dialog, session } from "electron";
 import { execSync } from "child_process";
 import path from "path";

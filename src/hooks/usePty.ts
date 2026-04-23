@@ -69,7 +69,7 @@ export function usePty({
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 13,
-      fontFamily: "'Cascadia Code', 'Consolas', 'Courier New', monospace",
+      fontFamily: "'JetBrains Mono Variable', 'JetBrains Mono', monospace",
       theme: TERM_THEME,
       allowProposedApi: true,
     });

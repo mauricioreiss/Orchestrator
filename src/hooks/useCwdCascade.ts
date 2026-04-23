@@ -67,6 +67,7 @@ export function useCwdCascade() {
       currentEdgeIds.add(e.id);
       if (!prevEdgeIdsRef.current.has(e.id) && !firstRunRef.current) {
         sourcesToCascade.add(e.source);
+        sourcesToCascade.add(e.target);
       }
     }
 
@@ -96,15 +97,27 @@ export function useCwdCascade() {
       if (!sourcePath) continue;
 
       for (const edge of edges) {
-        if (edge.source !== sourceId) continue;
-        const targetNode = nodes.find((n) => n.id === edge.target);
-        if (!targetNode) continue;
-
-        if (targetNode.type === "terminal" || targetNode.type === "architect") {
-          const currentCwd = (targetNode.data as Record<string, unknown>)?.cwd as string | undefined;
-          if (currentCwd === sourcePath) continue;
-          const prev = updates.get(targetNode.id) ?? {};
-          updates.set(targetNode.id, { ...prev, cwd: sourcePath });
+        // Forward: source has path → cascade to target
+        if (edge.source === sourceId) {
+          const targetNode = nodes.find((n) => n.id === edge.target);
+          if (targetNode && (targetNode.type === "terminal" || targetNode.type === "architect")) {
+            const currentCwd = (targetNode.data as Record<string, unknown>)?.cwd as string | undefined;
+            if (currentCwd !== sourcePath) {
+              const prev = updates.get(targetNode.id) ?? {};
+              updates.set(targetNode.id, { ...prev, cwd: sourcePath });
+            }
+          }
+        }
+        // Reverse: target has path → cascade to source (edge drawn backward)
+        if (edge.target === sourceId) {
+          const otherNode = nodes.find((n) => n.id === edge.source);
+          if (otherNode && (otherNode.type === "terminal" || otherNode.type === "architect")) {
+            const currentCwd = (otherNode.data as Record<string, unknown>)?.cwd as string | undefined;
+            if (currentCwd !== sourcePath) {
+              const prev = updates.get(otherNode.id) ?? {};
+              updates.set(otherNode.id, { ...prev, cwd: sourcePath });
+            }
+          }
         }
       }
     }

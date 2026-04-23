@@ -4,7 +4,7 @@ import {
   useReactFlow,
   type NodeProps,
 } from "@xyflow/react";
-import type { NoteNodeData, TerminalNodeData, ConnectedNodeInfo } from "../../types";
+import type { NoteNodeData, TerminalNodeData, VSCodeNodeData, ConnectedNodeInfo } from "../../types";
 import { isElectron } from "../../lib/electron";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
@@ -131,6 +131,31 @@ function NoteNode({ id, data, selected }: NodeProps) {
         };
       })
       .filter((info) => !!info.ptyId);
+
+    // Multi-hop: Note → VSCode → Terminal
+    const connectedVSCodes = targets.filter((n) => n.type === "vscode");
+    for (const vsc of connectedVSCodes) {
+      const vscData = vsc.data as VSCodeNodeData;
+      const vscPath = vscData.workspacePath;
+      const vscEdges = getEdges().filter(
+        (e) => e.source === vsc.id || e.target === vsc.id,
+      );
+      for (const ve of vscEdges) {
+        const neighborId = ve.source === vsc.id ? ve.target : ve.source;
+        if (neighborId === id) continue;
+        const neighbor = getNode(neighborId);
+        if (!neighbor || neighbor.type !== "terminal") continue;
+        const td = neighbor.data as TerminalNodeData;
+        if (!td.ptyId) continue;
+        if (allTerminals.some((t) => t.ptyId === td.ptyId)) continue;
+        allTerminals.push({
+          label: td.label ?? "Terminal",
+          type: "terminal",
+          cwd: td.cwd || vscPath,
+          ptyId: td.ptyId,
+        });
+      }
+    }
 
     console.log("[NoteNode] 3. Terminais conectados:", allTerminals.map((t) => t.label));
 

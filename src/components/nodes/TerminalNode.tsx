@@ -1,7 +1,7 @@
 import { memo, useRef, useEffect, useCallback, useState } from "react";
 import { Position, useReactFlow, type NodeProps } from "@xyflow/react";
 import { toast } from "sonner";
-import { invoke, isElectron } from "../../lib/electron";
+import { invoke, listen, isElectron } from "../../lib/electron";
 import { usePty } from "../../hooks/usePty";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
@@ -11,6 +11,11 @@ import NodeWrapper from "./NodeWrapper";
 import "@xterm/xterm/css/xterm.css";
 
 const ROLES = ["Leader", "Coder", "Agent", "CyberSec"] as const;
+
+// Boot queue: staggers concurrent agent boots to prevent race conditions.
+// Each boot takes ~8s total. Queue tracks active boots and assigns delay slots.
+let bootQueue: Promise<void> = Promise.resolve();
+const BOOT_STAGGER_MS = 2000;
 
 const ROLE_BADGE: Record<string, string> = {
   Leader: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
@@ -59,6 +64,7 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
   const [pipeFlash, setPipeFlash] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
   const [agentState, setAgentState] = useState<"idle" | "booting" | "injecting" | "ready">("idle");
+  const autoApprove = (nodeData.autoApprove as boolean | undefined) ?? false;
   const { syncDebounced } = useCanvasSync();
   const { setNodes, getEdges, getNodes } = useReactFlow();
 
@@ -153,44 +159,128 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
     [id, setNodes, syncDebounced],
   );
 
+  // PTY status monitoring: approval prompts, idle detection
+  const [ptyStatus, setPtyStatus] = useState<"active" | "awaiting_approval" | "idle">("active");
+
+  useEffect(() => {
+    if (!ptyId || !isElectron()) return;
+    const unlisten = listen<{ ptyId: string; status: string; label: string }>(
+      `pty-status-${ptyId}`,
+      ({ status }) => {
+        setPtyStatus(status as "active" | "awaiting_approval" | "idle");
+        if (status === "awaiting_approval") {
+          toast.warning(`Terminal "${label}" pede aprovacao.`, { duration: 6000 });
+        }
+        if (status === "idle") {
+          toast.success(`Terminal "${label}" concluiu a tarefa.`, { duration: 4000 });
+        }
+      },
+    );
+    return unlisten;
+  }, [ptyId, label]);
+
+  // Green glow auto-reset: idle border reverts to normal after 5s
+  useEffect(() => {
+    if (ptyStatus !== "idle") return;
+    const timer = setTimeout(() => setPtyStatus("active"), 5000);
+    return () => clearTimeout(timer);
+  }, [ptyStatus]);
+
+  const handleToggleAutoApprove = useCallback(() => {
+    const next = !autoApprove;
+    if (next) {
+      toast.warning(
+        "Auto-Approve ativado: o agente tera permissoes irrestritas neste terminal.",
+        { duration: 5000 },
+      );
+    }
+    setNodes((nds) =>
+      nds.map((n) =>
+        n.id === id ? { ...n, data: { ...n.data, autoApprove: next } } : n,
+      ),
+    );
+    syncDebounced();
+  }, [id, autoApprove, setNodes, syncDebounced]);
+
   const handleStartAgent = useCallback(async () => {
     if (!ptyId || agentState !== "idle") return;
     const capturedPtyId = ptyId;
     const personaFile = label.toLowerCase().replace(/\s+/g, "_") + "_persona.md";
 
-    // Step 1: Boot Claude CLI
     setAgentState("booting");
     toast.info(`Iniciando Claude CLI em "${label}"...`);
-    const bootBytes = Array.from(new TextEncoder().encode("claude\r\n"));
-    try {
-      await invoke("write_pty", { id: capturedPtyId, data: bootBytes });
-    } catch (err) {
-      console.error("[TerminalNode] start agent failed:", err);
-      setAgentState("idle");
-      return;
-    }
 
-    // Step 2: Wait 4s for CLI to initialize, then inject persona prompt
-    setTimeout(async () => {
-      const prompt = `Leia o arquivo ${personaFile} na raiz do projeto. Incorpore essas regras como sua persona e confirme quando estiver pronto para receber ordens.\r\n`;
-      setAgentState("injecting");
+    // Helper: write bytes and wait for IPC confirmation
+    const writePty = (data: number[]) =>
+      invoke("write_pty", { id: capturedPtyId, data });
 
-      const promptBytes = Array.from(new TextEncoder().encode(prompt));
+    // Helper: sleep
+    const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+    // Raw carriage return (char 13) — simulates physical Enter keypress
+    const forceEnter = Array.from(new TextEncoder().encode(String.fromCharCode(13)));
+
+    // Queue this boot behind any active boots to prevent race conditions
+    const myBoot = bootQueue.then(async () => {
       try {
-        await invoke("write_pty", { id: capturedPtyId, data: promptBytes });
+        // Step 1: Write boot command (with --dangerously-skip-permissions if Auto is on)
+        const bootCmd = autoApprove ? "claude --dangerously-skip-permissions" : "claude";
+        const bootText = Array.from(new TextEncoder().encode(bootCmd));
+        await writePty(bootText);
+        console.log(`[Auto-Ignition] Boot text sent to ptyId=${capturedPtyId} label="${label}"`);
+
+        // Step 2: Wait 500ms, then send CR(13) to execute
+        await sleep(500);
+        await writePty(forceEnter);
+        console.log(`[Force Enter] Boot CR(13) confirmed for ptyId=${capturedPtyId} label="${label}"`);
+
+        // Step 3: Wait 6s for CLI to fully initialize
+        await sleep(6000);
+        setAgentState("injecting");
+
+        // Step 4: Write persona prompt text
+        const prompt = `Leia o arquivo ${personaFile} na raiz do projeto. Incorpore essas regras como sua persona e confirme quando estiver pronto para receber ordens.`;
+        const promptBytes = Array.from(new TextEncoder().encode(prompt));
+        await writePty(promptBytes);
+        console.log(`[Auto-Ignition] Prompt text sent to ptyId=${capturedPtyId} label="${label}"`);
+
+        // Step 5: Wait 500ms, then send CR(13) to execute
+        await sleep(500);
+        await writePty(forceEnter);
+        console.log(`[Force Enter] Inject CR(13) confirmed for ptyId=${capturedPtyId} label="${label}"`);
+
         setAgentState("ready");
         toast.success(`Persona injetada: ${personaFile}`);
-        setTimeout(() => setAgentState("idle"), 3000);
+        await sleep(3000);
+        setAgentState("idle");
       } catch (err) {
-        console.error("[TerminalNode] persona injection failed:", err);
-        toast.error("Falha ao injetar persona");
+        console.error(`[TerminalNode] agent boot failed for "${label}":`, err);
+        toast.error(`Falha ao iniciar agente: ${label}`);
         setAgentState("idle");
       }
-    }, 4000);
-  }, [ptyId, label, agentState]);
+
+      // Stagger: give next boot in queue breathing room
+      await sleep(BOOT_STAGGER_MS);
+    });
+
+    bootQueue = myBoot;
+  }, [ptyId, label, agentState, autoApprove]);
 
   const borderColor = ROLE_BORDER[role] ?? ROLE_BORDER.Agent;
   const badgeClass = ROLE_BADGE[role] ?? ROLE_BADGE.Agent;
+
+  // Dynamic border based on PTY status
+  const statusBorderOverride = ptyStatus === "awaiting_approval"
+    ? "#f59e0b"
+    : ptyStatus === "idle"
+      ? "#10b981"
+      : undefined;
+
+  const statusIndicator = ptyStatus === "awaiting_approval"
+    ? <span className="text-amber-400 text-xs animate-pulse" title="Aguardando aprovacao">&#9888;</span>
+    : ptyStatus === "idle"
+      ? <span className="text-emerald-400 text-xs" title="Tarefa concluida">&#10003;</span>
+      : null;
 
   const roleBadge = (
     <div className="relative nodrag">
@@ -288,6 +378,20 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
     : agentState === "ready" ? "Pronto!"
     : "Agent";
   const agentBusy = agentState !== "idle";
+  const autoToggle = ptyId && connected ? (
+    <button
+      onClick={handleToggleAutoApprove}
+      className={`px-1.5 py-0.5 text-[10px] rounded transition-colors nodrag ${
+        autoApprove
+          ? "text-amber-400 bg-amber-500/10"
+          : "text-zinc-500 hover:text-zinc-400 hover:bg-zinc-500/10"
+      }`}
+      title={autoApprove ? "Auto-Approve LIGADO: --dangerously-skip-permissions" : "Auto-Approve DESLIGADO: modo normal com permissoes"}
+    >
+      Auto
+    </button>
+  ) : null;
+
   const agentButton = ptyId && connected ? (
     <button
       onClick={handleStartAgent}
@@ -321,12 +425,12 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
       id={id}
       selected={selected}
       borderColor={borderColor}
-      borderOverride={pipeFlash ? "#10b981" : undefined}
+      borderOverride={pipeFlash ? "#10b981" : statusBorderOverride}
       minWidth={350}
       minHeight={250}
       label={label}
-      titleBarExtra={<>{agentButton}{pipeButton}</>}
-      badges={<>{roleBadge}{statusDot}</>}
+      titleBarExtra={<>{autoToggle}{agentButton}{pipeButton}</>}
+      badges={<>{roleBadge}{statusIndicator}{statusDot}</>}
       statusLeft={connected ? "pwsh" : "disconnected"}
       statusRight={ptyId ? <span className="font-mono">{ptyId.slice(0, 8)}</span> : undefined}
       handles={HANDLES}

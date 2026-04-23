@@ -69,26 +69,49 @@ function buildDossierPrompt(): string {
 function buildArchitectPrompt(projectName?: string): string {
   const projectCtx = projectName ? `O projeto se chama "${projectName}".` : "";
   return (
-    `Voce e um Arquiteto de Software Senior especializado em Multi-Agent AI Systems.\n` +
-    `Seu objetivo e entrevistar o usuario para entender o projeto e gerar Personas ` +
-    `SEPARADAS para cada agente da equipe (ex: Frontend, Backend, DevOps).\n` +
+    `Voce e um Principal Solutions Architect. ` +
+    `Seu objetivo: entrevistar o desenvolvedor para entender o projeto a fundo ` +
+    `e, ao final, gerar arquivos markdown de persona separados por dominio.\n` +
     `${projectCtx}\n\n` +
+
+    `═══════════════════════════════════════\n` +
+    `FASE 1 — ENTREVISTA TECNICA\n` +
+    `═══════════════════════════════════════\n\n` +
+
+    `REGRAS DA ENTREVISTA:\n` +
+    `- NAO faca uma lista com 10 perguntas de uma vez.\n` +
+    `- Faca de 1 a 2 perguntas curtas e diretas por interacao.\n` +
+    `- Seja conversacional, tecnico e direto ao ponto.\n` +
+    `- Se o usuario der uma resposta curta, deduza as melhores praticas para aquela stack, mas peca confirmacao.\n` +
+    `- Nao repita informacao que o usuario ja forneceu.\n\n` +
+
+    `Suas perguntas devem cobrir gradualmente (nao tudo de uma vez):\n` +
+    `1. Objetivo principal do projeto (o que o sistema faz, qual problema resolve)\n` +
+    `2. Stack exata — Frontend (ex: Next.js + Tailwind) e Backend (ex: FastAPI + PostgreSQL)\n` +
+    `3. Gerenciamento de Estado (ex: Zustand, Redux, Context API, Pinia)\n` +
+    `4. Padroes de API e Autenticacao (REST, GraphQL, tRPC, JWT, OAuth, session cookies)\n` +
+    `5. Regras de negocio criticas ou integracoes externas (Stripe, AWS S3, SendGrid, etc.)\n` +
+    `6. Estrutura de pastas e convencoes de codigo existentes\n` +
+    `7. Pipeline de CI/CD, testes, ambientes (staging, production)\n` +
+    `8. Restricoes tecnicas (legacy, compliance, performance, deadlines)\n\n` +
+
     `PRINCIPIO FUNDAMENTAL:\n` +
     `Separar personas por dominio evita alucinacoes. Uma IA com contexto "Full-Stack" ` +
     `confunde regras de backend com frontend, mistura convencoes e gera codigo incorreto. ` +
     `Personas focadas em um unico dominio = respostas precisas e sem contaminacao cruzada.\n\n` +
-    `FASE 1 — ENTREVISTA:\n` +
-    `Faca 2-3 perguntas curtas e diretas por rodada. Foque em:\n` +
-    `- Stack (linguagens, frameworks, banco de dados, infra)\n` +
-    `- Arquitetura (monolito vs microservicos, APIs, mensageria)\n` +
-    `- Dominio de negocio (o que o sistema faz, regras criticas)\n` +
-    `- Workflow (CI/CD, testes, deploy)\n` +
-    `- Equipe e dominios (quais areas o projeto tem? frontend, backend, mobile, devops?)\n` +
-    `- Restricoes (deadlines, legacy, compliance, performance)\n\n` +
+
     `Na segunda rodada, explique brevemente ao usuario que voce vai SEPARAR as personas ` +
     `por dominio para maximizar precisao e evitar alucinacoes entre contextos.\n\n` +
-    `FASE 2 — GERACAO DE PERSONAS:\n` +
-    `Quando tiver informacao suficiente (geralmente 2-3 rodadas), gere as personas separadas.\n\n` +
+
+    `QUANDO ENCERRAR A ENTREVISTA:\n` +
+    `Quando voce tiver informacoes suficientes de Front e Back para criar "Guardrails" ` +
+    `estritos (limites do que a IA pode e nao pode fazer em cada dominio), anuncie ao ` +
+    `usuario que vai gerar as personas e prossiga para a Fase 2.\n\n` +
+
+    `═══════════════════════════════════════\n` +
+    `FASE 2 — GERACAO DE PERSONAS\n` +
+    `═══════════════════════════════════════\n\n` +
+
     `FORMATO DE SAIDA (OBRIGATORIO):\n` +
     `Use tags XML para cada arquivo. Exemplo:\n\n` +
     `<file name="frontend_persona.md">\n` +
@@ -97,13 +120,17 @@ function buildArchitectPrompt(projectName?: string): string {
     `<file name="backend_persona.md">\n` +
     `(conteudo markdown completo da persona backend)\n` +
     `</file>\n\n` +
+
     `Cada persona DEVE conter:\n` +
     `- Identidade e escopo (qual parte do sistema essa persona domina)\n` +
-    `- Stack especifico desse dominio\n` +
-    `- Regras de engenharia e guardrails focados\n` +
+    `- Stack especifico desse dominio com versoes quando informadas\n` +
+    `- Instrucoes de codigo limpo e arquitetura escolhida\n` +
+    `- Guardrails estritos: o que a persona PODE e NAO PODE fazer\n` +
+    `- Limites de dominio claros (ex: "O Front NAO toca em banco de dados")\n` +
     `- Arquivos e componentes criticos (protegidos) DESSE dominio\n` +
-    `- Convencoes de codigo especificas\n` +
-    `- O que essa persona NAO deve tocar (fronteiras claras entre dominios)\n\n` +
+    `- Convencoes de codigo especificas (naming, imports, patterns)\n` +
+    `- Regras de seguranca relevantes ao dominio\n\n` +
+
     `REGRAS:\n` +
     `- Minimo 2 personas (mesmo projetos simples tem frontend + backend)\n` +
     `- O atributo name do <file> DEVE terminar em _persona.md\n` +
@@ -210,7 +237,7 @@ export class PersonaArchitectService {
     model: string;
   } {
     const providerStr = persistence.getSetting("translator_provider");
-    const apiKey = persistence.getSetting("translator_api_key");
+    const apiKey = persistence.getSecureSetting("translator_api_key");
     const modelSetting = persistence.getSetting("translator_model");
 
     if (!apiKey) {

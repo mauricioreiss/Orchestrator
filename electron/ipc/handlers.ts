@@ -1,4 +1,5 @@
-import { ipcMain, type BrowserWindow } from "electron";
+import { ipcMain, Notification, type BrowserWindow } from "electron";
+import { createHash } from "crypto";
 import type { PtyService } from "../services/PtyService";
 import type { CodeServerService } from "../services/CodeServerService";
 import type { ContextService } from "../services/ContextService";
@@ -176,6 +177,36 @@ export function registerIpcHandlers(services: Services): void {
     persistence.setSetting(args.key, args.value),
   );
   ipcMain.handle("get_all_settings", () => persistence.getAllSettings());
+
+  // === Secure Settings (2) ===
+  ipcMain.handle("get_secure_setting", (_e, args: { key: string }) =>
+    persistence.getSecureSetting(args.key),
+  );
+  ipcMain.handle("set_secure_setting", (_e, args: { key: string; value: string }) =>
+    persistence.setSecureSetting(args.key, args.value),
+  );
+
+  // === Master Password (3) ===
+  ipcMain.handle("has_master_password", () =>
+    persistence.getSetting("master_password_hash") !== null,
+  );
+  ipcMain.handle("set_master_password", (_e, args: { password: string }) => {
+    const hash = createHash("sha256").update(args.password).digest("hex");
+    persistence.setSetting("master_password_hash", hash);
+    return true;
+  });
+  ipcMain.handle("verify_master_password", (_e, args: { password: string }) => {
+    const stored = persistence.getSetting("master_password_hash");
+    if (!stored) return false;
+    return createHash("sha256").update(args.password).digest("hex") === stored;
+  });
+
+  // === Notifications (1) ===
+  ipcMain.handle("send_notification", (_e, args: { title: string; body: string }) => {
+    if (Notification.isSupported()) {
+      new Notification({ title: args.title, body: args.body }).show();
+    }
+  });
 
   // === Translator (1) ===
   ipcMain.handle(

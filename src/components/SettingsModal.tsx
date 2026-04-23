@@ -25,7 +25,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
     Promise.all([
       invoke<string | null>("get_setting", { key: "translator_provider" }),
-      invoke<string | null>("get_setting", { key: "translator_api_key" }),
+      invoke<string | null>("get_secure_setting", { key: "translator_api_key" }),
       invoke<string | null>("get_setting", { key: "translator_model" }),
     ]).then(([prov, key, mod]) => {
       if (prov) setProvider(prov);
@@ -40,7 +40,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     try {
       await invoke("set_setting", { key: "translator_provider", value: provider });
       if (apiKey) {
-        await invoke("set_setting", { key: "translator_api_key", value: apiKey });
+        await invoke("set_secure_setting", { key: "translator_api_key", value: apiKey });
       }
       const modelValue = model || PROVIDERS.find((p) => p.value === provider)?.defaultModel || "";
       await invoke("set_setting", { key: "translator_model", value: modelValue });
@@ -96,7 +96,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               style={{ background: "var(--mx-titlebar)", borderBottom: "1px solid var(--mx-border)" }}
             >
               <h2 className="text-sm font-semibold" style={{ color: "var(--mx-text)" }}>
-                Maestro Translator Settings
+                AI Provider Settings
               </h2>
               <button
                 onClick={onClose}
@@ -192,8 +192,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 style={{ background: "var(--mx-surface-alt)", border: "1px solid var(--mx-border)" }}
               >
                 <p className="text-[11px] leading-relaxed" style={{ color: "var(--mx-text-muted)" }}>
-                  API keys are stored locally in SQLite. They never leave your machine
-                  except when calling the provider API directly.
+                  API keys are encrypted with OS keychain (safeStorage). They never leave
+                  your machine except when calling the provider API directly.
                 </p>
               </div>
             </div>

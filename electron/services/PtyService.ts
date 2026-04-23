@@ -1,4 +1,4 @@
-import type { BrowserWindow } from "electron";
+import { type BrowserWindow, Notification } from "electron";
 import * as pty from "node-pty";
 import { v4 as uuidv4 } from "uuid";
 import { execFileSync } from "child_process";
@@ -64,6 +64,12 @@ interface PtyInstance {
   coalesceTimer: ReturnType<typeof setTimeout> | null;
   /** 150ms max-wait forced flush timer handle. */
   maxWaitTimer: ReturnType<typeof setTimeout> | null;
+  /** Timestamp of last output activity. */
+  lastActivityTime: number;
+  /** 5s idle detection timer. Fires when output stops. */
+  idleTimer: ReturnType<typeof setTimeout> | null;
+  /** Current status for frontend monitoring. */
+  currentStatus: "active" | "awaiting_approval" | "idle";
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +78,29 @@ interface PtyInstance {
 
 const COALESCE_MS = 16; // ~60fps batch window
 const MAX_WAIT_MS = 150; // forced flush ceiling
+
+/** Patterns that should never be dispatched by AI to a terminal. */
+const BLOCKED_PATTERNS: RegExp[] = [
+  /\brm\s+(-[rfRF]+\s+)?[\/\\]/i,
+  /\bdel\s+\/[sS]/i,
+  /\bformat\s+[a-zA-Z]:/i,
+  /:\(\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;/,
+  /\bmkfs\b/i,
+  /\bdd\s+if=.*of=\/dev\//i,
+  />\s*\/dev\/[sh]d[a-z]/i,
+  /\brm\s+(-[rfRF]+\s+)?\*/i,
+  /\bshutdown\b/i,
+  /\breboot\b/i,
+];
+
+/** Check a command against the blocklist. Returns the matched pattern or null. */
+function checkBlockedCommand(command: string): string | null {
+  const normalized = command.trim();
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(normalized)) return pattern.source;
+  }
+  return null;
+}
 
 // Resolve preferred Windows shell once at module load.
 // Default: powershell.exe (always present on Win10+).
@@ -202,13 +231,16 @@ export class PtyService {
       flushBuffer: [],
       coalesceTimer: null,
       maxWaitTimer: null,
+      lastActivityTime: Date.now(),
+      idleTimer: null,
+      currentStatus: "active" as const,
     };
 
     this.instances.set(id, instance);
 
     // --- Output handler: detect tokens, push to ring buffer + schedule flush ---
     proc.onData((data: string) => {
-      const { cleanData, broadcasts, approvals, dispatches } = this.extractTokens(data);
+      const { cleanData, broadcasts, approvals, dispatches, awaitingDetected } = this.extractTokens(data);
 
       // Fan-out broadcast commands to connected terminals
       for (const cmd of broadcasts) {
@@ -228,6 +260,34 @@ export class PtyService {
         log.info(`[PtyService] dispatch detected from ${id} -> ${dispatch.targetLabel}: ${dispatch.command}`);
         this.dispatchHandler?.(id, dispatch.targetLabel, dispatch.command);
       }
+
+      // --- Status tracking: activity, approval detection, idle timer ---
+      instance.lastActivityTime = Date.now();
+
+      if (instance.idleTimer !== null) {
+        clearTimeout(instance.idleTimer);
+        instance.idleTimer = null;
+      }
+
+      // Transition back to active when new output arrives (unless approval detected)
+      if (instance.currentStatus !== "active" && !awaitingDetected) {
+        instance.currentStatus = "active";
+        this.emitStatus(id, "active");
+      }
+
+      // Awaiting approval detected
+      if (awaitingDetected && instance.currentStatus !== "awaiting_approval") {
+        instance.currentStatus = "awaiting_approval";
+        this.emitStatus(id, "awaiting_approval");
+      }
+
+      // 5s idle timer — fires when output stops
+      instance.idleTimer = setTimeout(() => {
+        if (instance.currentStatus === "active" || instance.currentStatus === "awaiting_approval") {
+          instance.currentStatus = "idle";
+          this.emitStatus(id, "idle");
+        }
+      }, 5000);
 
       // Only push non-broadcast output to buffers
       if (cleanData.length > 0) {
@@ -271,6 +331,7 @@ export class PtyService {
 
     const buf = Buffer.from(data);
     instance.process.write(buf.toString("utf-8"));
+    this.resetStatusOnInput(id);
   }
 
   /** Write a raw string directly to a PTY's stdin. Single atomic call. */
@@ -278,6 +339,18 @@ export class PtyService {
     const instance = this.instances.get(id);
     if (!instance) throw new Error(`PTY ${id} not found`);
     instance.process.write(text);
+    this.resetStatusOnInput(id);
+  }
+
+  /** Write string to PTY with command sanitization. For AI dispatch only. */
+  writeStringSafe(id: string, text: string): boolean {
+    const blocked = checkBlockedCommand(text);
+    if (blocked) {
+      log.warn(`[PtyService] BLOCKED dangerous command: "${text}" (matched: ${blocked})`);
+      return false;
+    }
+    this.writeString(id, text);
+    return true;
   }
 
   // -----------------------------------------------------------------------
@@ -504,9 +577,11 @@ export class PtyService {
       if (edge.target === sourceNode.id) neighborIds.add(edge.source);
     }
 
-    // 3. Find target terminal by label among neighbors
+    // 3. Find target terminal by label among neighbors (case-insensitive)
+    const targetLower = targetLabel.toLowerCase();
     const targetNode = graph.nodes.find(
-      (n) => neighborIds.has(n.id) && n.type === "terminal" && n.data?.label === targetLabel,
+      (n) => neighborIds.has(n.id) && n.type === "terminal" &&
+        (n.data?.label as string)?.toLowerCase() === targetLower,
     );
     if (!targetNode) return false;
 
@@ -521,6 +596,11 @@ export class PtyService {
     if (!targetInstance) return false;
     try {
       const cleanCommand = command.trim();
+      const blocked = checkBlockedCommand(cleanCommand);
+      if (blocked) {
+        log.warn(`[PtyService] BLOCKED route to "${targetLabel}": "${cleanCommand}" (${blocked})`);
+        return false;
+      }
       targetInstance.process.write(cleanCommand);
       setTimeout(() => {
         try { targetInstance.process.write("\x0D"); } catch { /* PTY may be dead */ }
@@ -553,16 +633,27 @@ export class PtyService {
     broadcasts: string[];
     approvals: string[];
     dispatches: { targetLabel: string; command: string }[];
+    awaitingDetected: boolean;
   } {
     const BROADCAST_RE = /^\[BROADCAST]\s*([^\r\n]+)$/;
     const APPROVAL_RE = /^\[ASK_APPROVAL]\s*([^\r\n]+)$/;
     // Optional leading quote tolerates echo output wrappers from cmd.exe.
     const SEND_TO_RE = /^["']?<<SEND_TO:([^>\r\n]+?)>>\s*([^\r\n]+)$/;
+    // CLI permission/approval prompts (Claude Code, inquirer, etc.)
+    const AWAITING_PATTERNS = [
+      /Do you want to/i,
+      /\(y\/n\)/i,
+      /\[Y\/n\]/i,
+      /\[y\/N\]/i,
+      /Confirm/i,
+      /Allow .+ tool/i,
+    ];
     const lines = rawData.split("\n");
     const broadcasts: string[] = [];
     const approvals: string[] = [];
     const dispatches: { targetLabel: string; command: string }[] = [];
     const cleanLines: string[] = [];
+    let awaitingDetected = false;
 
     for (const line of lines) {
       const stripped = stripAnsi(line).replace(/\r$/, "").trim();
@@ -588,10 +679,16 @@ export class PtyService {
         }
       }
 
+      if (!awaitingDetected) {
+        for (const pat of AWAITING_PATTERNS) {
+          if (pat.test(stripped)) { awaitingDetected = true; break; }
+        }
+      }
+
       cleanLines.push(line);
     }
 
-    return { cleanData: cleanLines.join("\n"), broadcasts, approvals, dispatches };
+    return { cleanData: cleanLines.join("\n"), broadcasts, approvals, dispatches, awaitingDetected };
   }
 
   // -----------------------------------------------------------------------
@@ -618,6 +715,41 @@ export class PtyService {
       clearTimeout(instance.maxWaitTimer);
       instance.maxWaitTimer = null;
     }
+    if (instance.idleTimer !== null) {
+      clearTimeout(instance.idleTimer);
+      instance.idleTimer = null;
+    }
+  }
+
+  /** Emit terminal status change to frontend + native OS notification when unfocused. */
+  private emitStatus(ptyId: string, status: string): void {
+    const instance = this.instances.get(ptyId);
+    const label = instance?.label ?? "Terminal";
+    this.win?.webContents.send(`pty-status-${ptyId}`, { ptyId, status, label });
+    log.info(`[PtyService] status: ${label} (${ptyId.slice(0, 8)}) -> ${status}`);
+
+    // Native notification when window is not focused (minimized/background)
+    if (this.win && !this.win.isFocused() && Notification.isSupported()) {
+      if (status === "idle") {
+        new Notification({ title: "Tarefa Concluida", body: `Agente "${label}" concluiu a tarefa.` }).show();
+      } else if (status === "awaiting_approval") {
+        new Notification({ title: "Aprovacao Necessaria", body: `Agente "${label}" precisa de aprovacao.` }).show();
+      }
+    }
+  }
+
+  /** Reset status to active when user provides input (keystroke, approval, etc.) */
+  private resetStatusOnInput(id: string): void {
+    const instance = this.instances.get(id);
+    if (!instance) return;
+    if (instance.currentStatus === "active") return;
+
+    if (instance.idleTimer !== null) {
+      clearTimeout(instance.idleTimer);
+      instance.idleTimer = null;
+    }
+    instance.currentStatus = "active";
+    this.emitStatus(id, "active");
   }
 
   private cleanup(id: string): void {
