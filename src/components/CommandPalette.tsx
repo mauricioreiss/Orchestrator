@@ -96,15 +96,6 @@ export default function CommandPalette({ onOpenSettings }: CommandPaletteProps) 
                 <span>Create Note</span>
               </Command.Item>
 
-              <Command.Item onSelect={() => run(() => store.addWorkspaceNode(getCenter()))}>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ color: "#14b8a6" }}>
-                  <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.4" />
-                  <path d="M7 3v14" stroke="currentColor" strokeWidth="1.2" />
-                  <path d="M10 8l2 2-2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span>Create Workspace</span>
-              </Command.Item>
-
               <Command.Item onSelect={() => run(() => store.addMarkdownNode(getCenter()))}>
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ color: "#64748b" }}>
                   <rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.4" />
@@ -115,7 +106,7 @@ export default function CommandPalette({ onOpenSettings }: CommandPaletteProps) 
 
               <Command.Item onSelect={() => run(() => store.addKanbanNode(getCenter()))}>
                 <LayoutDashboard size={16} style={{ color: "#10b981" }} />
-                <span>Create Kanban</span>
+                <span>Create Tasks</span>
               </Command.Item>
 
               <Command.Item onSelect={() => run(() => store.addApiNode(getCenter()))}>
@@ -134,6 +125,14 @@ export default function CommandPalette({ onOpenSettings }: CommandPaletteProps) 
                   <path d="M2.5 10h15" stroke="currentColor" strokeWidth="1.2" />
                 </svg>
                 <span>Create Browser</span>
+              </Command.Item>
+
+              <Command.Item onSelect={() => run(() => store.addArchitectNode(getCenter()))}>
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ color: "#8b5cf6" }}>
+                  <path d="M10 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+                  <path d="M10 10V2M10 10l7-4M10 10l-7-4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                </svg>
+                <span>Create Architect</span>
               </Command.Item>
 
               <Command.Item onSelect={() => run(() => store.addGroupNode(getCenter()))}>

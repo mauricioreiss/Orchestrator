@@ -12,6 +12,7 @@ import { SupervisorService } from "./services/SupervisorService";
 import { TranslatorService } from "./services/TranslatorService";
 import { MonitorService } from "./services/MonitorService";
 import { FileSystemService } from "./services/FileSystemService";
+import { PersonaArchitectService } from "./services/PersonaArchitectService";
 import { registerIpcHandlers } from "./ipc/handlers";
 
 // Force English locale so VS Code Web doesn't try to load missing pt-BR NLS bundles
@@ -30,6 +31,7 @@ let supervisorService: SupervisorService;
 let translatorService: TranslatorService;
 let monitorService: MonitorService;
 let fileSystemService: FileSystemService;
+let personaArchitectService: PersonaArchitectService;
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -82,6 +84,7 @@ function initServices(): void {
   translatorService = new TranslatorService();
   monitorService = new MonitorService();
   fileSystemService = new FileSystemService();
+  personaArchitectService = new PersonaArchitectService();
 
   // PtyService needs window reference for webContents.send
   // Will be set after window creation
@@ -127,6 +130,7 @@ app.whenReady().then(() => {
     proxy: proxyService,
     monitor: monitorService,
     fileSystem: fileSystemService,
+    personaArchitect: personaArchitectService,
     getWindow: () => mainWindow,
   });
 
@@ -136,6 +140,21 @@ app.whenReady().then(() => {
     const result = await dialog.showOpenDialog(mainWindow, options);
     if (result.canceled) return null;
     return result.filePaths[0] ?? null;
+  });
+
+  // Save dialog handler
+  ipcMain.handle("dialog:save", async (_event, options) => {
+    if (!mainWindow) return null;
+    const result = await dialog.showSaveDialog(mainWindow, options);
+    if (result.canceled) return null;
+    return result.filePath ?? null;
+  });
+
+  // File write handler (for Persona Architect dossier output)
+  ipcMain.handle("fs_write_file", async (_event, args: { filePath: string; content: string }) => {
+    const fs = await import("fs/promises");
+    await fs.writeFile(args.filePath, args.content, "utf-8");
+    return { success: true, path: args.filePath };
   });
 
   app.on("activate", () => {

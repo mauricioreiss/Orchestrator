@@ -1,7 +1,7 @@
 import { memo, useRef, useEffect, useCallback, useState } from "react";
 import { Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import { invoke } from "../../lib/electron";
-import { isElectron } from "../../lib/electron";
+import { toast } from "sonner";
+import { invoke, isElectron } from "../../lib/electron";
 import { usePty } from "../../hooks/usePty";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
@@ -58,6 +58,7 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
 
   const [pipeFlash, setPipeFlash] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
+  const [agentState, setAgentState] = useState<"idle" | "booting" | "injecting" | "ready">("idle");
   const { syncDebounced } = useCanvasSync();
   const { setNodes, getEdges, getNodes } = useReactFlow();
 
@@ -73,7 +74,7 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
   }, [ptyId, id, nodeData.ptyId, setNodes]);
 
   // Live directory change: when data.cwd mutates after mount (e.g. via Deep
-  // CWD cascade), issue a real `cd /d "<path>"` into the live shell. The
+  // CWD cascade), issue a real `cd "<path>"` into the live shell. The
   // PTY spawned with the initial cwd, so we skip the first equality check.
   const prevCwdRef = useRef<string | undefined>(nodeData.cwd);
   useEffect(() => {
@@ -85,7 +86,7 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
     prevCwdRef.current = nodeData.cwd;
 
     const cdBytes = Array.from(
-      new TextEncoder().encode(`cd /d "${nodeData.cwd}"\r`),
+      new TextEncoder().encode(`cd "${nodeData.cwd}"\r`),
     );
     invoke("write_pty", { id: ptyId, data: cdBytes }).catch((err) =>
       console.error("[TerminalNode] live cd failed:", err),
@@ -151,6 +152,42 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
     },
     [id, setNodes, syncDebounced],
   );
+
+  const handleStartAgent = useCallback(async () => {
+    if (!ptyId || agentState !== "idle") return;
+    const capturedPtyId = ptyId;
+    const personaFile = label.toLowerCase().replace(/\s+/g, "_") + "_persona.md";
+
+    // Step 1: Boot Claude CLI
+    setAgentState("booting");
+    toast.info(`Iniciando Claude CLI em "${label}"...`);
+    const bootBytes = Array.from(new TextEncoder().encode("claude\r\n"));
+    try {
+      await invoke("write_pty", { id: capturedPtyId, data: bootBytes });
+    } catch (err) {
+      console.error("[TerminalNode] start agent failed:", err);
+      setAgentState("idle");
+      return;
+    }
+
+    // Step 2: Wait 4s for CLI to initialize, then inject persona prompt
+    setTimeout(async () => {
+      const prompt = `Leia o arquivo ${personaFile} na raiz do projeto. Incorpore essas regras como sua persona e confirme quando estiver pronto para receber ordens.\r\n`;
+      setAgentState("injecting");
+
+      const promptBytes = Array.from(new TextEncoder().encode(prompt));
+      try {
+        await invoke("write_pty", { id: capturedPtyId, data: promptBytes });
+        setAgentState("ready");
+        toast.success(`Persona injetada: ${personaFile}`);
+        setTimeout(() => setAgentState("idle"), 3000);
+      } catch (err) {
+        console.error("[TerminalNode] persona injection failed:", err);
+        toast.error("Falha ao injetar persona");
+        setAgentState("idle");
+      }
+    }, 4000);
+  }, [ptyId, label, agentState]);
 
   const borderColor = ROLE_BORDER[role] ?? ROLE_BORDER.Agent;
   const badgeClass = ROLE_BADGE[role] ?? ROLE_BADGE.Agent;
@@ -246,6 +283,29 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
     );
   }
 
+  const agentButtonLabel = agentState === "booting" ? "Acordando..."
+    : agentState === "injecting" ? "Injetando..."
+    : agentState === "ready" ? "Pronto!"
+    : "Agent";
+  const agentBusy = agentState !== "idle";
+  const agentButton = ptyId && connected ? (
+    <button
+      onClick={handleStartAgent}
+      disabled={agentBusy}
+      className={`px-1.5 py-0.5 text-[10px] rounded transition-colors nodrag ${
+        agentState === "ready"
+          ? "text-emerald-400"
+          : agentBusy
+            ? "text-amber-400 animate-pulse"
+            : "text-purple-400 hover:text-purple-300 hover:bg-purple-500/10"
+      }`}
+      style={{ cursor: agentBusy ? "not-allowed" : "pointer" }}
+      title={agentBusy ? agentButtonLabel : `Auto-Ignicao: inicia Claude CLI e injeta ${label.toLowerCase().replace(/\s+/g, "_")}_persona.md`}
+    >
+      {agentButtonLabel}
+    </button>
+  ) : null;
+
   const pipeButton = hasSourceTerminals() && ptyId ? (
     <button
       onClick={handlePipe}
@@ -265,7 +325,7 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
       minWidth={350}
       minHeight={250}
       label={label}
-      titleBarExtra={pipeButton}
+      titleBarExtra={<>{agentButton}{pipeButton}</>}
       badges={<>{roleBadge}{statusDot}</>}
       statusLeft={connected ? "pwsh" : "disconnected"}
       statusRight={ptyId ? <span className="font-mono">{ptyId.slice(0, 8)}</span> : undefined}

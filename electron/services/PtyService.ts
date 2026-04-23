@@ -1,6 +1,7 @@
 import type { BrowserWindow } from "electron";
 import * as pty from "node-pty";
 import { v4 as uuidv4 } from "uuid";
+import { execFileSync } from "child_process";
 import stripAnsi from "strip-ansi";
 import log from "../log";
 import type { PtyInfo, CanvasGraph } from "../types";
@@ -71,6 +72,19 @@ interface PtyInstance {
 
 const COALESCE_MS = 16; // ~60fps batch window
 const MAX_WAIT_MS = 150; // forced flush ceiling
+
+// Resolve preferred Windows shell once at module load.
+// Default: powershell.exe (always present on Win10+).
+// Upgrade: pwsh.exe (PowerShell 7+) only if confirmed on PATH.
+const WIN_SHELL: string = (() => {
+  if (process.platform !== "win32") return "";
+  try {
+    execFileSync("where", ["pwsh.exe"], { stdio: "ignore", timeout: 3000 });
+    return "pwsh.exe";
+  } catch {
+    return "powershell.exe";
+  }
+})();
 
 export class PtyService {
   private win: BrowserWindow | null = null;
@@ -147,16 +161,27 @@ export class PtyService {
       ? cwd
       : (process.env.USERPROFILE || process.env.HOME || process.cwd());
 
-    // Windows: COMSPEC (cmd.exe) is the safest default; fallback to powershell
-    const rawShell =
+    // Windows: use cached shell (pwsh.exe if available, else powershell.exe).
+    // No -NoProfile flag — user needs profile loading (Oh My Posh, etc.).
+    // Args MUST stay as [] literal (node-pty C++ binding crashes otherwise).
+    const safeShell =
       process.platform === "win32"
-        ? process.env.COMSPEC || "powershell.exe"
+        ? WIN_SHELL
         : process.env.SHELL || "bash";
-    const safeShell: string = (typeof rawShell === "string" && rawShell.length > 0)
-      ? rawShell
-      : "powershell.exe";
 
     log.info(`[PtyService] spawn: shell=${safeShell} cols=${safeCols} rows=${safeRows} cwd=${safeCwd}`);
+
+    // Surgical env cleanup: remove ONLY the VS Code IPC vars that cause
+    // Claude CLI to detect the extension host and open unwanted tabs.
+    // Keep everything else (ELECTRON_*, Windows system vars) — node-pty
+    // needs ELECTRON_RUN_AS_NODE for conpty_console_list_agent.js.
+    const cleanEnv = { ...process.env } as Record<string, string>;
+    delete cleanEnv.VSCODE_IPC_HOOK;
+    delete cleanEnv.VSCODE_IPC_HOOK_CLI;
+    delete cleanEnv.VSCODE_PID;
+    delete cleanEnv.VSCODE_AMD_ENTRYPOINT;
+    delete cleanEnv.VSCODE_NLS_CONFIG;
+    delete cleanEnv.ORIGINAL_XDG_CURRENT_DESKTOP;
 
     // CRITICAL: second arg MUST be an explicit Array literal `[]`.
     // node-pty's C++ binding crashes if args is undefined or not an Array.
@@ -166,7 +191,7 @@ export class PtyService {
       cols: safeCols,
       rows: safeRows,
       cwd: safeCwd,
-      env: process.env as { [key: string]: string },
+      env: cleanEnv,
       useConpty: true,
     });
 
@@ -453,8 +478,9 @@ export class PtyService {
    *
    * Target terminals run an interactive CLI (e.g. Claude Code) that treats
    * stdin as conversational input. We simulate "user types + presses Enter"
-   * by writing the sanitized payload followed by a single CR (`\r`). A full
-   * CRLF would be interpreted as Enter + extra newline by some CLIs.
+   * by writing the sanitized payload followed by a delayed `\x0D` (50ms gap).
+   * The target CLI (Claude Code) runs in raw mode and needs the text buffer
+   * to arrive before the Enter signal so it can process the input correctly.
    *
    * Uses bidirectional edge lookup: the target can be upstream or downstream.
    */
@@ -487,14 +513,18 @@ export class PtyService {
     const targetPtyId = targetNode.data?.ptyId;
     if (typeof targetPtyId !== "string" || !targetPtyId) return false;
 
-    // 4. Inject prompt + Enter (CR) into target CLI's stdin.
-    //    Write the full string in ONE atomic call directly to the pty process.
-    //    Going through this.write() adds a byte-array round-trip that isn't
-    //    needed and could contribute to interleaved echo on fast terminals.
+    // 4. Inject prompt into target CLI's stdin with delayed Enter.
+    //    Target CLIs (Claude Code) run in raw/readline mode and need the
+    //    text buffer to arrive BEFORE the Enter signal (\x0D). A 50ms gap
+    //    lets the CLI process the text chunk before registering the keypress.
     const targetInstance = this.instances.get(targetPtyId);
     if (!targetInstance) return false;
     try {
-      targetInstance.process.write(command + "\r");
+      const cleanCommand = command.trim();
+      targetInstance.process.write(cleanCommand);
+      setTimeout(() => {
+        try { targetInstance.process.write("\x0D"); } catch { /* PTY may be dead */ }
+      }, 50);
     } catch {
       log.warn(`[Swarm] Failed to write to target PTY ${targetPtyId}`);
       return false;

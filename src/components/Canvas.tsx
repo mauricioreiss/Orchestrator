@@ -27,12 +27,13 @@ import KanbanNode from "./nodes/KanbanNode";
 import ApiNode from "./nodes/ApiNode";
 import DbNode from "./nodes/DbNode";
 import MonacoNode from "./nodes/MonacoNode";
-import NativeWorkspaceNode from "./nodes/NativeWorkspaceNode";
 import MarkdownNode from "./nodes/MarkdownNode";
+import ArchitectNode from "./nodes/ArchitectNode";
 import ProjectGroupNode from "./nodes/ProjectGroupNode";
 import NodeErrorBoundary from "./nodes/NodeErrorBoundary";
 import FlowEdge from "./edges/FlowEdge";
 import StatusBar from "./StatusBar";
+import ProjectNavigator from "./ProjectNavigator";
 import { useCanvasSync } from "../hooks/useCanvasSync";
 import { useHibernation } from "../hooks/useHibernation";
 import { useViewportCulling } from "../hooks/useViewportCulling";
@@ -70,8 +71,8 @@ const nodeTypes: NodeTypes = {
   api: withErrorBoundary(ApiNode),
   db: withErrorBoundary(DbNode),
   monaco: withErrorBoundary(MonacoNode),
-  workspace: withErrorBoundary(NativeWorkspaceNode),
   markdown: withErrorBoundary(MarkdownNode),
+  architect: withErrorBoundary(ArchitectNode),
   group: withErrorBoundary(ProjectGroupNode),
 };
 
@@ -125,15 +126,15 @@ export default function Canvas() {
       else if (sourceNode?.type === "api") stroke = "#f97316";
       else if (sourceNode?.type === "db") stroke = "#0ea5e9";
       else if (sourceNode?.type === "monaco") stroke = "#6366f1";
-      else if (sourceNode?.type === "workspace") stroke = "#14b8a6";
       else if (sourceNode?.type === "markdown") stroke = "#64748b";
+      else if (sourceNode?.type === "architect") stroke = "#8b5cf6";
       else if (sourceNode?.type === "terminal") {
         const role = (sourceNode.data as TerminalNodeData)?.role ?? "Agent";
         stroke = NODE_EDGE_COLORS[role] ?? "#A855F7";
       }
       storeConnect(params, stroke);
 
-      // Path cascade (vscode/terminal/workspace/obsidian -> terminal/workspace)
+      // Path cascade (vscode/terminal/obsidian -> terminal)
       // is handled reactively by useCwdCascade. Only non-path smart-context
       // lives here.
 
@@ -256,6 +257,10 @@ export default function Canvas() {
           <StatusBar />
         </Panel>
 
+        <Panel position="top-right">
+          <ProjectNavigator />
+        </Panel>
+
         <Background
           variant={BackgroundVariant.Dots}
           gap={20}
@@ -273,8 +278,8 @@ export default function Canvas() {
             if (node.type === "api") return "#f97316";
             if (node.type === "db") return "#0ea5e9";
             if (node.type === "monaco") return "#6366f1";
-            if (node.type === "workspace") return "#14b8a6";
             if (node.type === "markdown") return "#64748b";
+            if (node.type === "architect") return "#8b5cf6";
             if (node.type === "group") return (node.data as GroupNodeData)?.color ?? "#3b82f6";
             return "#A855F7";
           }}

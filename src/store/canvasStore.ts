@@ -49,8 +49,8 @@ interface CanvasStore {
   addApiNode: (position?: { x: number; y: number }) => void;
   addDbNode: (position?: { x: number; y: number }) => void;
   addGroupNode: (position?: { x: number; y: number }) => void;
-  addWorkspaceNode: (position?: { x: number; y: number }) => void;
   addMarkdownNode: (position?: { x: number; y: number }) => void;
+  addArchitectNode: (position?: { x: number; y: number }) => void;
   addMonacoNode: (filePath: string, rootDir: string) => void;
 
   // Persistence
@@ -215,14 +215,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
       data: {
         type: "kanban",
-        label: `Kanban ${count}`,
-        columns: [
-          { id: crypto.randomUUID(), title: "To Do", cards: [] },
-          { id: crypto.randomUUID(), title: "Doing", cards: [] },
-          { id: crypto.randomUUID(), title: "Done", cards: [] },
-        ],
+        label: `Tasks ${count}`,
+        columns: [],
+        tasks: [],
       },
-      style: { width: 600, height: 450 },
+      style: { width: 400, height: 400 },
     });
   },
 
@@ -270,17 +267,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     });
   },
 
-  addWorkspaceNode: (position?) => {
-    const count = get().nodes.filter((n) => n.type === "workspace").length + 1;
-    get().addNode({
-      id: crypto.randomUUID(),
-      type: "workspace",
-      position: position ?? { x: 100 + Math.random() * 400, y: 100 + Math.random() * 300 },
-      data: { type: "workspace", label: `Workspace ${count}`, path: "" },
-      style: { width: 900, height: 600 },
-    });
-  },
-
   addMarkdownNode: (position?) => {
     const count = get().nodes.filter((n) => n.type === "markdown").length + 1;
     get().addNode({
@@ -289,6 +275,17 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
       data: { type: "markdown", label: `Markdown ${count}`, content: "" },
       style: { width: 500, height: 400 },
+    });
+  },
+
+  addArchitectNode: (position?) => {
+    const count = get().nodes.filter((n) => n.type === "architect").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "architect",
+      position: position ?? { x: 80 + Math.random() * 400, y: 80 + Math.random() * 300 },
+      data: { type: "architect", label: `Architect ${count}` },
+      style: { width: 400, height: 500 },
     });
   },
 

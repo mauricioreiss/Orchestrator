@@ -9,6 +9,7 @@ import type { TranslatorService } from "../services/TranslatorService";
 import type { ProxyService } from "../services/ProxyService";
 import type { MonitorService } from "../services/MonitorService";
 import type { FileSystemService } from "../services/FileSystemService";
+import type { PersonaArchitectService } from "../services/PersonaArchitectService";
 import log from "../log";
 import type { CanvasGraph, ContextAction, SyncResult, ConnectedNodeInfo } from "../types";
 
@@ -23,6 +24,7 @@ interface Services {
   proxy: ProxyService;
   monitor: MonitorService;
   fileSystem: FileSystemService;
+  personaArchitect: PersonaArchitectService;
   getWindow: () => BrowserWindow | null;
 }
 
@@ -84,7 +86,7 @@ function executeContextActions(
 }
 
 export function registerIpcHandlers(services: Services): void {
-  const { pty, codeServer, context, persistence, vault, supervisor, translator, proxy, monitor, fileSystem, getWindow } = services;
+  const { pty, codeServer, context, persistence, vault, supervisor, translator, proxy, monitor, fileSystem, personaArchitect, getWindow } = services;
 
   // Utility
   ipcMain.handle("ping", () => "pong");
@@ -290,6 +292,42 @@ export function registerIpcHandlers(services: Services): void {
     const graph = context.getLastGraph();
     if (!graph) return;
     pty.routeToTarget(sourcePtyId, targetLabel, command, graph, getWindow());
+  });
+
+  // === Persona Architect (2) ===
+  ipcMain.handle("persona_chat", async (_e, args: {
+    messages: Array<{ role: string; content: string }>;
+    projectName?: string;
+  }) => {
+    return personaArchitect.chat(
+      args.messages as any,
+      args.projectName,
+      persistence,
+    );
+  });
+
+  ipcMain.handle("architect_chat", async (_e, args: {
+    messages: Array<{ role: string; content: string }>;
+    projectName?: string;
+  }) => {
+    return personaArchitect.architectChat(
+      args.messages as any,
+      args.projectName,
+      persistence,
+    );
+  });
+
+  ipcMain.handle("persona_generate_dossier", async (_e, args: {
+    template: string;
+    conversation: string;
+    projectName: string;
+  }) => {
+    return personaArchitect.generateDossier(
+      args.template,
+      args.conversation,
+      args.projectName,
+      persistence,
+    );
   });
 
   // === Approval Handler ===

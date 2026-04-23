@@ -78,6 +78,7 @@ export interface KanbanCard {
   id: string;
   title: string;
   priority?: CardPriority;
+  dueDate?: string; // ISO date YYYY-MM-DD
 }
 
 export interface KanbanColumn {
@@ -87,10 +88,22 @@ export interface KanbanColumn {
   cards: KanbanCard[];
 }
 
+// -- Task management types --
+
+export type TaskStatus = "todo" | "doing" | "done";
+
+export interface TaskItem {
+  id: string;
+  title: string;
+  status: TaskStatus;
+  dueDate?: string; // ISO date YYYY-MM-DD
+}
+
 export interface KanbanNodeData {
   type: "kanban";
   label: string;
-  columns: KanbanColumn[];
+  columns: KanbanColumn[]; // legacy column-based data
+  tasks?: TaskItem[]; // flat task list (primary)
   [key: string]: unknown;
 }
 
@@ -120,17 +133,25 @@ export interface MonacoNodeData {
   [key: string]: unknown;
 }
 
-export interface WorkspaceNodeData {
-  type: "workspace";
-  label: string;
-  path: string;
-  [key: string]: unknown;
-}
-
 export interface MarkdownNodeData {
   type: "markdown";
   label: string;
   content: string;
+  [key: string]: unknown;
+}
+
+export interface PersonaFile {
+  name: string;
+  content: string;
+}
+
+export interface ArchitectNodeData {
+  type: "architect";
+  label: string;
+  cwd?: string;
+  messages?: ChatMessage[];
+  personaFiles?: PersonaFile[]; // multi-agent persona files
+  savedPaths?: string[]; // paths where files were saved
   [key: string]: unknown;
 }
 
@@ -150,8 +171,20 @@ export type CanvasNodeData =
   | ApiNodeData
   | DbNodeData
   | MonacoNodeData
-  | WorkspaceNodeData
-  | MarkdownNodeData;
+  | MarkdownNodeData
+  | ArchitectNodeData;
+
+// -- Persona Architect types --
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface DossierResult {
+  dossier: string;
+  ignitionPrompt: string;
+}
 
 // -- Vault types --
 

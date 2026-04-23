@@ -69,7 +69,7 @@ const NODE_BUTTONS = [
   },
   {
     key: "kanban",
-    label: "Kanban",
+    label: "Tasks",
     color: "#10b981",
     icon: <LayoutDashboard size={20} />,
   },
@@ -97,15 +97,13 @@ const NODE_BUTTONS = [
     ),
   },
   {
-    key: "workspace",
-    label: "Workspace",
-    color: "#14b8a6",
+    key: "architect",
+    label: "Architect",
+    color: "#8b5cf6",
     icon: (
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <rect x="2" y="3" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.4" />
-        <path d="M7 3v14" stroke="currentColor" strokeWidth="1.2" />
-        <path d="M10 8l2 2-2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M14 12h1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        <path d="M10 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        <path d="M10 10V2M10 10l7-4M10 10l-7-4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -133,7 +131,7 @@ const ADD_ACTIONS: Record<NodeKey, (store: ReturnType<typeof useCanvasStore.getS
   api: (s) => s.addApiNode(),
   db: (s) => s.addDbNode(),
   markdown: (s) => s.addMarkdownNode(),
-  workspace: (s) => s.addWorkspaceNode(),
+  architect: (s) => s.addArchitectNode(),
   group: (s) => s.addGroupNode(),
 };
 

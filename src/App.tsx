@@ -11,6 +11,7 @@ import { useCanvasStore } from "./store/canvasStore";
 import { useAuthStore } from "./store/authStore";
 import { useApprovalListener } from "./hooks/useApprovalListener";
 import { useSwarmRouter } from "./hooks/useSwarmRouter";
+import { useTaskWatcher } from "./hooks/useTaskWatcher";
 import LoginScreen from "./components/LoginScreen";
 import CommandPalette from "./components/CommandPalette";
 
@@ -49,6 +50,9 @@ export default function App() {
 
   // Swarm: route <<SEND_TO:Label>> commands through the graph
   useSwarmRouter();
+
+  // Task Watcher: scan Kanban cards for overdue/today deadlines
+  useTaskWatcher();
 
   useEffect(() => {
     const electronDetected = isElectron();

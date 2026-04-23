@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useReactFlow, type Node } from "@xyflow/react";
 import { useCanvasStore } from "../store/canvasStore";
-import type { TerminalNodeData, WorkspaceNodeData } from "../types";
+
 
 /**
  * Maps each node type to the field inside its `data` object that holds the
@@ -11,8 +11,8 @@ import type { TerminalNodeData, WorkspaceNodeData } from "../types";
 const PATH_KEY_BY_TYPE: Record<string, string> = {
   vscode: "workspacePath",
   terminal: "cwd",
-  workspace: "path",
   obsidian: "vaultPath",
+  architect: "cwd",
 };
 
 function getNodePath(node: Node): string | undefined {
@@ -26,7 +26,7 @@ function getNodePath(node: Node): string | undefined {
  * Deep CWD Sync.
  *
  * Reactively propagates `cwd` / `path` from source nodes to directly
- * connected terminal/workspace targets. Triggers:
+ * connected terminal targets. Triggers:
  *
  *   1. A new edge is added whose source has a path  -> cascade to target.
  *   2. A tracked source node's path field mutates   -> cascade to targets.
@@ -100,16 +100,11 @@ export function useCwdCascade() {
         const targetNode = nodes.find((n) => n.id === edge.target);
         if (!targetNode) continue;
 
-        if (targetNode.type === "terminal") {
-          const currentCwd = (targetNode.data as TerminalNodeData)?.cwd;
+        if (targetNode.type === "terminal" || targetNode.type === "architect") {
+          const currentCwd = (targetNode.data as Record<string, unknown>)?.cwd as string | undefined;
           if (currentCwd === sourcePath) continue;
           const prev = updates.get(targetNode.id) ?? {};
           updates.set(targetNode.id, { ...prev, cwd: sourcePath });
-        } else if (targetNode.type === "workspace") {
-          const currentPath = (targetNode.data as WorkspaceNodeData)?.path;
-          if (currentPath === sourcePath) continue;
-          const prev = updates.get(targetNode.id) ?? {};
-          updates.set(targetNode.id, { ...prev, path: sourcePath });
         }
       }
     }

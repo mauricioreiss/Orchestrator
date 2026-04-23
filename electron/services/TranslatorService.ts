@@ -93,9 +93,14 @@ export class TranslatorService {
       const target = connectedNodes.find((n) => n.label === targetLabel);
       if (target?.ptyId) {
         try {
-          pty.writeString(target.ptyId, command + "\r");
+          const cleanCommand = command.trim();
+          const ptyId = target.ptyId;
+          pty.writeString(ptyId, cleanCommand);
+          setTimeout(() => {
+            try { pty.writeString(ptyId, "\x0D"); } catch { /* PTY may be dead */ }
+          }, 50);
           dispatched++;
-          log.info(`[orchestrated-space] Dispatched to "${targetLabel}": ${command}`);
+          log.info(`[orchestrated-space] Dispatched to "${targetLabel}": ${cleanCommand}`);
 
           // Visual feedback for frontend edge flash
           window?.webContents.send("swarm-dispatch", {

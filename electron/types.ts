@@ -156,3 +156,14 @@ export interface FsFileContent {
   size: number;
   language: string;
 }
+
+// Persona Architect types
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface DossierResult {
+  dossier: string;
+  ignitionPrompt: string;
+}

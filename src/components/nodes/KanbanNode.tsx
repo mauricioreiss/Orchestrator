@@ -1,16 +1,6 @@
 import { memo, useState, useCallback } from "react";
 import { Position, useReactFlow, type NodeProps } from "@xyflow/react";
-import {
-  DragDropContext,
-  Droppable,
-  Draggable,
-  type DropResult,
-} from "@hello-pangea/dnd";
-import type {
-  KanbanNodeData,
-  KanbanColumn,
-  CardPriority,
-} from "../../types";
+import type { KanbanNodeData, TaskItem, TaskStatus } from "../../types";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import { useCanvasStore } from "../../store/canvasStore";
 import { useShallow } from "zustand/react/shallow";
@@ -24,45 +14,65 @@ const HANDLES = [
   { id: "right", type: "source" as const, position: Position.Right, color: "#10b981" },
 ];
 
-const PRIORITY_COLORS: Record<string, string> = {
-  green: "#10b981",
-  yellow: "#eab308",
-  orange: "#f97316",
-  red: "#ef4444",
+const STATUS_CYCLE: TaskStatus[] = ["todo", "doing", "done"];
+
+const STATUS_STYLE: Record<TaskStatus, { label: string; color: string; bg: string; border: string }> = {
+  todo: { label: "TODO", color: "#94a3b8", bg: "rgba(148,163,184,0.1)", border: "rgba(148,163,184,0.3)" },
+  doing: { label: "DOING", color: "#3b82f6", bg: "rgba(59,130,246,0.1)", border: "rgba(59,130,246,0.3)" },
+  done: { label: "DONE", color: "#10b981", bg: "rgba(16,185,129,0.1)", border: "rgba(16,185,129,0.3)" },
 };
 
-const PRIORITY_CYCLE: (CardPriority | undefined)[] = [
-  undefined, "green", "yellow", "orange", "red",
-];
+function getDueDateColor(task: TaskItem): string {
+  if (!task.dueDate) return "var(--mx-text-muted)";
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(task.dueDate + "T00:00:00");
+  if (task.status === "done") return "#10b981"; // green strikethrough look
+  if (due.getTime() < today.getTime()) return "#ef4444"; // overdue = red
+  if (due.getTime() === today.getTime()) return "#eab308"; // today = yellow
+  return "var(--mx-text-muted)";
+}
 
-const COLUMN_COLORS = [
-  "#ef4444", "#f97316", "#eab308", "#10b981", "#06b6d4", "#8b5cf6",
-];
+function formatDueDate(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function isOverdue(task: TaskItem): boolean {
+  if (!task.dueDate || task.status === "done") return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(task.dueDate + "T00:00:00").getTime() < today.getTime();
+}
+
+function isToday(task: TaskItem): boolean {
+  if (!task.dueDate) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(task.dueDate + "T00:00:00").getTime() === today.getTime();
+}
 
 function KanbanNode({ id, data, selected, parentId }: NodeProps) {
   const nodeData = data as KanbanNodeData;
-  const label = nodeData.label ?? "Kanban";
-  const columns: KanbanColumn[] = nodeData.columns ?? [];
+  const label = nodeData.label ?? "Tasks";
+  const tasks: TaskItem[] = nodeData.tasks ?? [];
 
   const hibernatedGroups = useCanvasStore(useShallow((s) => s.hibernatedGroups));
   const isHibernated = parentId ? hibernatedGroups.includes(parentId as string) : false;
 
   const { setNodes } = useReactFlow();
   const { syncDebounced } = useCanvasSync();
-  const [newCardText, setNewCardText] = useState<Record<string, string>>({});
-  const [colorPickerCol, setColorPickerCol] = useState<string | null>(null);
-  const [editingColId, setEditingColId] = useState<string | null>(null);
-  const [editColTitle, setEditColTitle] = useState("");
 
-  // --- Core state updater ---
+  const [newTitle, setNewTitle] = useState("");
+  const [newDate, setNewDate] = useState("");
 
-  const updateColumns = useCallback(
-    (updater: (cols: KanbanColumn[]) => KanbanColumn[]) => {
+  const updateTasks = useCallback(
+    (updater: (tasks: TaskItem[]) => TaskItem[]) => {
       setNodes((nds) =>
         nds.map((n) => {
           if (n.id !== id) return n;
-          const current = (n.data as KanbanNodeData).columns ?? [];
-          return { ...n, data: { ...n.data, columns: updater(current) } };
+          const current = (n.data as KanbanNodeData).tasks ?? [];
+          return { ...n, data: { ...n.data, tasks: updater(current) } };
         }),
       );
       syncDebounced();
@@ -70,140 +80,54 @@ function KanbanNode({ id, data, selected, parentId }: NodeProps) {
     [id, setNodes, syncDebounced],
   );
 
-  // --- DnD handler ---
+  const addTask = useCallback(() => {
+    const title = newTitle.trim();
+    if (!title) return;
+    const task: TaskItem = {
+      id: crypto.randomUUID(),
+      title,
+      status: "todo",
+      dueDate: newDate.trim() || undefined,
+    };
+    updateTasks((t) => [...t, task]);
+    setNewTitle("");
+    setNewDate("");
+  }, [newTitle, newDate, updateTasks]);
 
-  const handleDragEnd = useCallback(
-    (result: DropResult) => {
-      const { destination, source, type } = result;
-      if (!destination) return;
-      if (
-        destination.droppableId === source.droppableId &&
-        destination.index === source.index
-      ) return;
-
-      if (type === "column") {
-        updateColumns((cols) => {
-          const arr = [...cols];
-          const [moved] = arr.splice(source.index, 1);
-          arr.splice(destination.index, 0, moved);
-          return arr;
-        });
-        return;
-      }
-
-      // Card move (within same column or cross-column)
-      updateColumns((cols) => {
-        const newCols = cols.map((c) => ({ ...c, cards: [...c.cards] }));
-        const srcCol = newCols.find((c) => c.id === source.droppableId);
-        const dstCol = newCols.find((c) => c.id === destination.droppableId);
-        if (!srcCol || !dstCol) return cols;
-        const [card] = srcCol.cards.splice(source.index, 1);
-        dstCol.cards.splice(destination.index, 0, card);
-        return newCols;
-      });
-    },
-    [updateColumns],
-  );
-
-  // --- Card operations ---
-
-  const addCard = useCallback(
-    (columnId: string) => {
-      const text = (newCardText[columnId] ?? "").trim();
-      if (!text) return;
-      updateColumns((cols) =>
-        cols.map((col) =>
-          col.id === columnId
-            ? { ...col, cards: [...col.cards, { id: crypto.randomUUID(), title: text }] }
-            : col,
-        ),
-      );
-      setNewCardText((prev) => ({ ...prev, [columnId]: "" }));
-    },
-    [newCardText, updateColumns],
-  );
-
-  const removeCard = useCallback(
-    (columnId: string, cardId: string) => {
-      updateColumns((cols) =>
-        cols.map((col) =>
-          col.id === columnId
-            ? { ...col, cards: col.cards.filter((c) => c.id !== cardId) }
-            : col,
-        ),
-      );
-    },
-    [updateColumns],
-  );
-
-  const cyclePriority = useCallback(
-    (columnId: string, cardId: string) => {
-      updateColumns((cols) =>
-        cols.map((col) => {
-          if (col.id !== columnId) return col;
-          return {
-            ...col,
-            cards: col.cards.map((card) => {
-              if (card.id !== cardId) return card;
-              const idx = PRIORITY_CYCLE.indexOf(card.priority);
-              const next = (idx + 1) % PRIORITY_CYCLE.length;
-              return { ...card, priority: PRIORITY_CYCLE[next] };
-            }),
-          };
+  const cycleStatus = useCallback(
+    (taskId: string) => {
+      updateTasks((tasks) =>
+        tasks.map((t) => {
+          if (t.id !== taskId) return t;
+          const idx = STATUS_CYCLE.indexOf(t.status);
+          const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+          return { ...t, status: next };
         }),
       );
     },
-    [updateColumns],
+    [updateTasks],
   );
 
-  // --- Column operations ---
-
-  const addColumn = useCallback(() => {
-    updateColumns((cols) => [
-      ...cols,
-      { id: crypto.randomUUID(), title: `Column ${cols.length + 1}`, cards: [] },
-    ]);
-  }, [updateColumns]);
-
-  const removeColumn = useCallback(
-    (columnId: string) => {
-      updateColumns((cols) => cols.filter((c) => c.id !== columnId));
-      setColorPickerCol(null);
+  const removeTask = useCallback(
+    (taskId: string) => {
+      updateTasks((tasks) => tasks.filter((t) => t.id !== taskId));
     },
-    [updateColumns],
+    [updateTasks],
   );
 
-  const setColumnColor = useCallback(
-    (columnId: string, color: string | undefined) => {
-      updateColumns((cols) =>
-        cols.map((col) => (col.id === columnId ? { ...col, color } : col)),
-      );
-      setColorPickerCol(null);
-    },
-    [updateColumns],
-  );
-
-  const renameColumn = useCallback(
-    (columnId: string, title: string) => {
-      const trimmed = title.trim();
-      if (!trimmed) return;
-      updateColumns((cols) =>
-        cols.map((col) => (col.id === columnId ? { ...col, title: trimmed } : col)),
+  const setTaskDueDate = useCallback(
+    (taskId: string, dueDate: string | undefined) => {
+      updateTasks((tasks) =>
+        tasks.map((t) => (t.id === taskId ? { ...t, dueDate: dueDate || undefined } : t)),
       );
     },
-    [updateColumns],
+    [updateTasks],
   );
 
-  const commitColRename = useCallback(() => {
-    if (editingColId) {
-      renameColumn(editingColId, editColTitle);
-      setEditingColId(null);
-    }
-  }, [editingColId, editColTitle, renameColumn]);
-
-  const totalCards = columns.reduce((sum, col) => sum + col.cards.length, 0);
-
-  // --- Hibernated state ---
+  const todoCount = tasks.filter((t) => t.status === "todo").length;
+  const doingCount = tasks.filter((t) => t.status === "doing").length;
+  const doneCount = tasks.filter((t) => t.status === "done").length;
+  const overdueCount = tasks.filter((t) => isOverdue(t)).length;
 
   if (isHibernated) {
     return (
@@ -211,8 +135,8 @@ function KanbanNode({ id, data, selected, parentId }: NodeProps) {
         id={id}
         selected={selected}
         borderColor={BORDER_COLOR}
-        minWidth={500}
-        minHeight={350}
+        minWidth={350}
+        minHeight={300}
         label={label}
         badges={
           <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
@@ -228,269 +152,163 @@ function KanbanNode({ id, data, selected, parentId }: NodeProps) {
     );
   }
 
-  // --- Active state ---
-
   return (
     <NodeWrapper
       id={id}
       selected={selected}
       borderColor={BORDER_COLOR}
-      minWidth={500}
-      minHeight={350}
+      minWidth={350}
+      minHeight={300}
       label={label}
-      titleBarExtra={
-        <button
-          onClick={addColumn}
-          className="px-1.5 py-0.5 text-[10px] text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded transition-colors nodrag"
-          title="Add column"
-        >
-          + Col
-        </button>
-      }
       badges={
-        <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-          {totalCards} cards
-        </span>
+        <>
+          <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+            {tasks.length} tasks
+          </span>
+          {overdueCount > 0 && (
+            <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full border bg-red-500/20 text-red-400 border-red-500/30">
+              {overdueCount} overdue
+            </span>
+          )}
+        </>
       }
-      statusLeft={`${columns.length} columns`}
-      statusRight={<span style={{ color: "rgba(16,185,129,0.6)" }}>kanban</span>}
+      statusLeft={`${todoCount}T ${doingCount}D ${doneCount}✓`}
+      statusRight={<span style={{ color: "rgba(16,185,129,0.6)" }}>tasks</span>}
       handles={HANDLES}
     >
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <Droppable droppableId="board" direction="horizontal" type="column">
-          {(boardProvided) => (
-            <div
-              ref={boardProvided.innerRef}
-              {...boardProvided.droppableProps}
-              className="flex-1 flex gap-2 p-2 min-h-0 overflow-x-auto overflow-y-hidden nodrag nowheel"
-            >
-              {columns.map((col, colIdx) => (
-                <Draggable key={col.id} draggableId={col.id} index={colIdx}>
-                  {(colProvided, colSnapshot) => (
-                    <div
-                      ref={colProvided.innerRef}
-                      {...colProvided.draggableProps}
-                      className="flex flex-col min-w-[160px] flex-1 rounded-lg"
-                      style={{
-                        ...colProvided.draggableProps.style,
-                        background: "var(--mx-input-bg)",
-                        border: `1px solid ${colSnapshot.isDragging ? "#10b981" : "var(--mx-border)"}`,
-                      }}
-                    >
-                      {/* Column header = drag handle */}
-                      <div
-                        {...colProvided.dragHandleProps}
-                        className="flex items-center justify-between px-2 py-1.5 cursor-grab active:cursor-grabbing relative"
-                        style={{
-                          borderBottom: `2px solid ${col.color || "var(--mx-border)"}`,
-                          background: col.color ? `${col.color}15` : "transparent",
-                          borderRadius: "8px 8px 0 0",
-                        }}
-                      >
-                        {editingColId === col.id ? (
-                          <input
-                            autoFocus
-                            value={editColTitle}
-                            onChange={(e) => setEditColTitle(e.target.value)}
-                            onBlur={commitColRename}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") commitColRename();
-                              if (e.key === "Escape") setEditingColId(null);
-                            }}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            className="text-xs font-semibold bg-transparent outline-none border-b max-w-[120px] nodrag"
-                            style={{ color: col.color || "var(--mx-text)", borderColor: col.color || "var(--mx-border)" }}
-                            spellCheck={false}
-                          />
-                        ) : (
-                          <span
-                            className="text-xs font-semibold truncate cursor-text"
-                            style={{ color: col.color || "var(--mx-text)" }}
-                            onDoubleClick={(e) => {
-                              e.stopPropagation();
-                              setEditColTitle(col.title);
-                              setEditingColId(col.id);
-                            }}
-                            title="Double-click to rename"
-                          >
-                            {col.title}
-                          </span>
-                        )}
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[9px]" style={{ color: "var(--mx-text-muted)" }}>
-                            {col.cards.length}
-                          </span>
-                          <button
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setColorPickerCol(colorPickerCol === col.id ? null : col.id);
-                            }}
-                            className="w-3 h-3 rounded-full border transition-colors"
-                            style={{
-                              background: col.color || "transparent",
-                              borderColor: col.color || "var(--mx-border)",
-                            }}
-                            title="Column color"
-                          />
-                          <button
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeColumn(col.id);
-                            }}
-                            className="text-[9px] text-red-400 opacity-40 hover:opacity-100 transition-opacity"
-                            title="Remove column"
-                          >
-                            &times;
-                          </button>
-                        </div>
-
-                        {/* Color picker popover */}
-                        {colorPickerCol === col.id && (
-                          <div
-                            className="absolute top-full left-0 mt-1 flex gap-1 p-1.5 rounded-md z-10"
-                            style={{
-                              background: "var(--mx-glass-bg)",
-                              border: "1px solid var(--mx-border)",
-                              backdropFilter: "blur(12px)",
-                            }}
-                            onMouseDown={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              onClick={() => setColumnColor(col.id, undefined)}
-                              className="w-4 h-4 rounded-full border"
-                              style={{ borderColor: "var(--mx-border)", background: "transparent" }}
-                              title="None"
-                            />
-                            {COLUMN_COLORS.map((c) => (
-                              <button
-                                key={c}
-                                onClick={() => setColumnColor(col.id, c)}
-                                className="w-4 h-4 rounded-full"
-                                style={{ background: c }}
-                              />
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Card drop zone */}
-                      <Droppable droppableId={col.id} type="card">
-                        {(cardProvided, cardSnapshot) => (
-                          <div
-                            ref={cardProvided.innerRef}
-                            {...cardProvided.droppableProps}
-                            className="flex-1 min-h-[40px] overflow-y-auto p-1.5 space-y-1"
-                            style={{
-                              background: cardSnapshot.isDraggingOver
-                                ? "rgba(16,185,129,0.05)"
-                                : "transparent",
-                              transition: "background 0.15s",
-                            }}
-                          >
-                            {col.cards.map((card, cardIdx) => (
-                              <Draggable key={card.id} draggableId={card.id} index={cardIdx}>
-                                {(cardDragProvided, cardDragSnapshot) => (
-                                  <div
-                                    ref={cardDragProvided.innerRef}
-                                    {...cardDragProvided.draggableProps}
-                                    {...cardDragProvided.dragHandleProps}
-                                    className="rounded px-2 py-1.5 text-[11px] cursor-grab active:cursor-grabbing group"
-                                    style={{
-                                      ...cardDragProvided.draggableProps.style,
-                                      background: "var(--mx-glass-bg)",
-                                      border: "1px solid var(--mx-glass-border)",
-                                      borderLeft: card.priority
-                                        ? `4px solid ${PRIORITY_COLORS[card.priority]}`
-                                        : "1px solid var(--mx-glass-border)",
-                                      color: "var(--mx-text)",
-                                      boxShadow: cardDragSnapshot.isDragging
-                                        ? "0 4px 12px rgba(0,0,0,0.3)"
-                                        : "none",
-                                    }}
-                                  >
-                                    <div className="flex items-start justify-between gap-1">
-                                      <span className="break-words flex-1">{card.title}</span>
-                                      <div className="flex gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                          onMouseDown={(e) => e.stopPropagation()}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            cyclePriority(col.id, card.id);
-                                          }}
-                                          className="w-3 h-3 rounded-full border transition-colors"
-                                          style={{
-                                            background: card.priority
-                                              ? PRIORITY_COLORS[card.priority]
-                                              : "transparent",
-                                            borderColor: card.priority
-                                              ? PRIORITY_COLORS[card.priority]
-                                              : "var(--mx-border)",
-                                          }}
-                                          title={`Priority: ${card.priority || "none"}`}
-                                        />
-                                        <button
-                                          onMouseDown={(e) => e.stopPropagation()}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            removeCard(col.id, card.id);
-                                          }}
-                                          className="text-[9px] text-red-400 transition-opacity"
-                                          title="Remove"
-                                        >
-                                          &times;
-                                        </button>
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </Draggable>
-                            ))}
-                            {cardProvided.placeholder}
-                          </div>
-                        )}
-                      </Droppable>
-
-                      {/* Add card input */}
-                      <div
-                        className="flex gap-1 p-1.5"
-                        style={{ borderTop: "1px solid var(--mx-border)" }}
-                      >
-                        <input
-                          type="text"
-                          className="flex-1 text-[10px] px-1.5 py-1 rounded border outline-none nodrag"
-                          style={{
-                            background: "var(--mx-input-bg)",
-                            borderColor: "var(--mx-input-border)",
-                            color: "var(--mx-text)",
-                          }}
-                          placeholder="New card..."
-                          value={newCardText[col.id] ?? ""}
-                          onChange={(e) =>
-                            setNewCardText((p) => ({ ...p, [col.id]: e.target.value }))
-                          }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") addCard(col.id);
-                          }}
-                          spellCheck={false}
-                        />
-                        <button
-                          onClick={() => addCard(col.id)}
-                          className="px-1.5 text-[10px] text-emerald-400 hover:text-emerald-300 rounded transition-colors"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </Draggable>
-              ))}
-              {boardProvided.placeholder}
+      <div className="flex flex-col flex-1 min-h-0">
+        {/* Task list */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1 nodrag nowheel">
+          {tasks.length === 0 && (
+            <div className="flex items-center justify-center py-6">
+              <span className="text-[11px]" style={{ color: "var(--mx-text-muted)" }}>
+                Nenhuma tarefa. Adicione abaixo.
+              </span>
             </div>
           )}
-        </Droppable>
-      </DragDropContext>
+          {tasks.map((task) => {
+            const st = STATUS_STYLE[task.status];
+            const overdue = isOverdue(task);
+            const today = isToday(task);
+            const dateColor = getDueDateColor(task);
+
+            return (
+              <div
+                key={task.id}
+                className="flex items-center gap-2 px-2 py-1.5 rounded group transition-colors"
+                style={{
+                  background: overdue ? "rgba(239,68,68,0.05)" : "var(--mx-glass-bg)",
+                  border: `1px solid ${overdue ? "rgba(239,68,68,0.2)" : today && task.status !== "done" ? "rgba(234,179,8,0.2)" : "var(--mx-glass-border)"}`,
+                }}
+              >
+                {/* Status badge (click to cycle) */}
+                <button
+                  onClick={() => cycleStatus(task.id)}
+                  className="shrink-0 px-1.5 py-0.5 text-[9px] font-bold rounded cursor-pointer transition-colors"
+                  style={{
+                    color: st.color,
+                    background: st.bg,
+                    border: `1px solid ${st.border}`,
+                  }}
+                  title="Click to change status"
+                >
+                  {st.label}
+                </button>
+
+                {/* Title */}
+                <span
+                  className="flex-1 text-[11px] break-words min-w-0"
+                  style={{
+                    color: task.status === "done" ? "var(--mx-text-muted)" : "var(--mx-text)",
+                    textDecoration: task.status === "done" ? "line-through" : "none",
+                  }}
+                >
+                  {task.title}
+                </span>
+
+                {/* Due date */}
+                {task.dueDate && (
+                  <span
+                    className="shrink-0 text-[9px] font-mono"
+                    style={{ color: dateColor }}
+                    title={overdue ? "Atrasada!" : today ? "Vence hoje!" : task.dueDate}
+                  >
+                    {overdue && "!! "}
+                    {formatDueDate(task.dueDate)}
+                  </span>
+                )}
+
+                {/* Date picker (hidden, for adding date to tasks without one) */}
+                {!task.dueDate && (
+                  <input
+                    type="date"
+                    value=""
+                    onChange={(e) => setTaskDueDate(task.id, e.target.value)}
+                    className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-[9px] bg-transparent outline-none"
+                    style={{ color: "var(--mx-text-muted)", width: 22, colorScheme: "dark" }}
+                    title="Set due date"
+                  />
+                )}
+
+                {/* Remove */}
+                <button
+                  onClick={() => removeTask(task.id)}
+                  className="shrink-0 text-[9px] text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="Remove task"
+                >
+                  &times;
+                </button>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Add task input */}
+        <div
+          className="shrink-0 flex items-center gap-1.5 p-2 nodrag"
+          style={{ borderTop: "1px solid var(--mx-border)" }}
+        >
+          <input
+            type="text"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") addTask(); }}
+            placeholder="Nova tarefa..."
+            className="flex-1 text-[11px] px-2 py-1 rounded border outline-none"
+            style={{
+              background: "var(--mx-input-bg)",
+              borderColor: "var(--mx-input-border)",
+              color: "var(--mx-text)",
+            }}
+            spellCheck={false}
+          />
+          <input
+            type="date"
+            value={newDate}
+            onChange={(e) => setNewDate(e.target.value)}
+            className="text-[9px] px-1 py-1 rounded border outline-none"
+            style={{
+              background: "var(--mx-input-bg)",
+              borderColor: "var(--mx-input-border)",
+              color: "var(--mx-text-muted)",
+              colorScheme: "dark",
+              width: 105,
+            }}
+            title="Data de entrega"
+          />
+          <button
+            onClick={addTask}
+            className="px-2 py-1 text-[10px] font-medium rounded transition-colors"
+            style={{
+              background: newTitle.trim() ? "rgba(16,185,129,0.15)" : "transparent",
+              color: newTitle.trim() ? "#10b981" : "var(--mx-text-muted)",
+              border: `1px solid ${newTitle.trim() ? "rgba(16,185,129,0.3)" : "var(--mx-border)"}`,
+            }}
+          >
+            Add
+          </button>
+        </div>
+      </div>
     </NodeWrapper>
   );
 }

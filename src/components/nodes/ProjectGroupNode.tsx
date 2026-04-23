@@ -3,6 +3,7 @@ import { NodeResizer, useReactFlow, type NodeProps } from "@xyflow/react";
 import { useCanvasSync } from "../../hooks/useCanvasSync";
 import type { GroupNodeData } from "../../types";
 import { GROUP_COLORS } from "../../types";
+import PersonaArchitectModal from "../PersonaArchitectModal";
 
 function ProjectGroupNode({ id, data, selected }: NodeProps) {
   const nodeData = data as GroupNodeData;
@@ -11,6 +12,7 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
   const [editing, setEditing] = useState(false);
   const [label, setLabel] = useState(nodeData.label ?? "Project");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [showArchitect, setShowArchitect] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { setNodes } = useReactFlow();
@@ -83,6 +85,19 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
             </span>
           )}
 
+          <button
+              onClick={() => setShowArchitect(true)}
+              className="flex items-center justify-center w-5 h-5 rounded hover:opacity-80 transition-opacity nodrag"
+              style={{ color }}
+              title="Persona Architect"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M2 17l10 5 10-5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                <path d="M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+              </svg>
+            </button>
+
           {/* Color picker */}
           <div className="relative nodrag">
             <button
@@ -111,6 +126,12 @@ function ProjectGroupNode({ id, data, selected }: NodeProps) {
           </div>
         </div>
       </div>
+
+      <PersonaArchitectModal
+        open={showArchitect}
+        onClose={() => setShowArchitect(false)}
+        projectName={label}
+      />
     </>
   );
 }

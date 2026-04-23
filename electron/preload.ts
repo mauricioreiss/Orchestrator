@@ -16,6 +16,11 @@ const ALLOWED_INVOKE_CHANNELS = [
   "approve_agent_action", "reject_agent_action",
   "fs_read_directory", "fs_read_file",
   "dialog:open",
+  "persona_chat",
+  "architect_chat",
+  "persona_generate_dossier",
+  "dialog:save",
+  "fs_write_file",
 ] as const;
 
 type AllowedChannel = typeof ALLOWED_INVOKE_CHANNELS[number];
@@ -45,4 +50,7 @@ contextBridge.exposeInMainWorld("maestriAPI", {
 
   showOpenDialog: (options: Electron.OpenDialogOptions) =>
     ipcRenderer.invoke("dialog:open", options),
+
+  showSaveDialog: (options: Electron.SaveDialogOptions) =>
+    ipcRenderer.invoke("dialog:save", options),
 });
