@@ -22,7 +22,6 @@ import TerminalNode from "./nodes/TerminalNode";
 import NoteNode from "./nodes/NoteNode";
 import VSCodeNode from "./nodes/VSCodeNode";
 import ObsidianNode from "./nodes/ObsidianNode";
-import BrowserNode from "./nodes/BrowserNode";
 import KanbanNode from "./nodes/KanbanNode";
 import ApiNode from "./nodes/ApiNode";
 import DbNode from "./nodes/DbNode";
@@ -67,7 +66,6 @@ const nodeTypes: NodeTypes = {
   note: withErrorBoundary(NoteNode),
   vscode: withErrorBoundary(VSCodeNode),
   obsidian: withErrorBoundary(ObsidianNode),
-  browser: withErrorBoundary(BrowserNode),
   kanban: withErrorBoundary(KanbanNode),
   api: withErrorBoundary(ApiNode),
   db: withErrorBoundary(DbNode),
@@ -114,7 +112,6 @@ export default function Canvas() {
   const onConnect: OnConnect = useCallback(
     (params) => {
       const sourceNode = getNode(params.source);
-      const targetNode = getNode(params.target);
 
       let stroke = "#A855F7";
       if (sourceNode?.type === "note") {
@@ -122,7 +119,6 @@ export default function Canvas() {
         stroke = noteData.commandMode ? "#A855F7" : "#f59e0b";
       } else if (sourceNode?.type === "vscode") stroke = "#06b6d4";
       else if (sourceNode?.type === "obsidian") stroke = "#a855f7";
-      else if (sourceNode?.type === "browser") stroke = "#f43f5e";
       else if (sourceNode?.type === "kanban") stroke = "#10b981";
       else if (sourceNode?.type === "api") stroke = "#f97316";
       else if (sourceNode?.type === "db") stroke = "#0ea5e9";
@@ -139,24 +135,9 @@ export default function Canvas() {
       // is handled reactively by useCwdCascade. Only non-path smart-context
       // lives here.
 
-      // Smart Context: VSCode -> Browser injects default dev URL (Vite :5173)
-      if (
-        sourceNode?.type === "vscode" &&
-        targetNode?.type === "browser"
-      ) {
-        const devUrl = "http://localhost:5173";
-        setNodes((nds) =>
-          nds.map((n) =>
-            n.id === params.target
-              ? { ...n, data: { ...n.data, url: devUrl } }
-              : n,
-          ),
-        );
-      }
-
       syncDebounced();
     },
-    [storeConnect, syncDebounced, getNode, setNodes],
+    [storeConnect, syncDebounced, getNode],
   );
 
   const handleEdgesChange = useCallback(
@@ -258,7 +239,7 @@ export default function Canvas() {
           <StatusBar />
         </Panel>
 
-        <Panel position="top-right">
+        <Panel position="top-right" style={{ marginTop: 40, marginRight: 20 }}>
           <ProjectNavigator />
         </Panel>
 
@@ -278,7 +259,6 @@ export default function Canvas() {
             if (node.type === "note") return "#f59e0b";
             if (node.type === "vscode") return "#06b6d4";
             if (node.type === "obsidian") return "#a855f7";
-            if (node.type === "browser") return "#f43f5e";
             if (node.type === "kanban") return "#10b981";
             if (node.type === "api") return "#f97316";
             if (node.type === "db") return "#0ea5e9";

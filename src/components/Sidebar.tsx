@@ -46,17 +46,6 @@ const NODE_BUTTONS = [
     ),
   },
   {
-    key: "browser",
-    label: "Browser",
-    color: "#f43f5e",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.4" />
-        <path d="M2.5 10h15M10 2.5a12 12 0 013 7.5 12 12 0 01-3 7.5 12 12 0 01-3-7.5A12 12 0 0110 2.5z" stroke="currentColor" strokeWidth="1.2" />
-      </svg>
-    ),
-  },
-  {
     key: "obsidian",
     label: "Vault",
     color: "#a855f7",
@@ -125,7 +114,6 @@ const ADD_ACTIONS: Record<NodeKey, (store: ReturnType<typeof useCanvasStore.getS
   terminal: (s) => s.addTerminalNode(),
   note: (s) => s.addNoteNode(),
   vscode: (s) => s.addVSCodeNode(),
-  browser: (s) => s.addBrowserNode(),
   obsidian: (s) => s.addObsidianNode(),
   kanban: (s) => s.addKanbanNode(),
   api: (s) => s.addApiNode(),

@@ -11,7 +11,8 @@
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:rebuild": "electron-rebuild -o better-sqlite3,node-pty",
     "electron:dev": "npm run electron:compile && concurrently \"npm run dev\" \"wait-on http://localhost:1420 && electron .\"",
-    "electron:build": "npm run build && npm run electron:compile && electron-builder"
+    "electron:build": "npm run build && npm run electron:compile && electron-builder",
+    "postinstall": "electron-rebuild -o better-sqlite3,node-pty"
   },
   "dependencies": {
     "@fontsource-variable/jetbrains-mono": "^5.2.8",

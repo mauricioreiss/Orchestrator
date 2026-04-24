@@ -37,9 +37,15 @@ export default function PersonaArchitectModal({ open, onClose, projectName }: Pe
   const [ignitionPrompt, setIgnitionPrompt] = useState("");
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [appBasePath, setAppBasePath] = useState(".");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Resolve app base path for bundled resources
+  useEffect(() => {
+    invoke<string>("get_app_path").then(setAppBasePath).catch(() => {});
+  }, []);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -135,14 +141,14 @@ export default function PersonaArchitectModal({ open, onClose, projectName }: Pe
   const handleQuickTemplate = useCallback(async (templatePath: string) => {
     try {
       const result = await invoke<{ content: string }>("fs_read_file", {
-        rootDir: ".",
+        rootDir: appBasePath,
         relativePath: templatePath,
       });
       setTemplate(result.content);
     } catch (err: any) {
       setError(err?.message || "Failed to load template");
     }
-  }, []);
+  }, [appBasePath]);
 
   const generateDossier = useCallback(async () => {
     if (!template.trim()) return;

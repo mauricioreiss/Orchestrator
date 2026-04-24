@@ -44,7 +44,6 @@ interface CanvasStore {
   addNoteNode: (position?: { x: number; y: number }) => void;
   addVSCodeNode: (position?: { x: number; y: number }) => void;
   addObsidianNode: (position?: { x: number; y: number }) => void;
-  addBrowserNode: (position?: { x: number; y: number }) => void;
   addKanbanNode: (position?: { x: number; y: number }) => void;
   addApiNode: (position?: { x: number; y: number }) => void;
   addDbNode: (position?: { x: number; y: number }) => void;
@@ -250,18 +249,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       type: "obsidian",
       position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "obsidian", label: `Vault ${count}`, vaultPath: "" },
-      style: { width: W, height: H },
-    });
-  },
-
-  addBrowserNode: (position?) => {
-    const W = 800, H = 600;
-    const count = get().nodes.filter((n) => n.type === "browser").length + 1;
-    get().addNode({
-      id: crypto.randomUUID(),
-      type: "browser",
-      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
-      data: { type: "browser", label: `Browser ${count}`, url: "" },
       style: { width: W, height: H },
     });
   },

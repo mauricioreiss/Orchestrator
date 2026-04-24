@@ -49,7 +49,7 @@ export class SupervisorService {
           break;
         }
         default:
-          // note, obsidian, group, browser, kanban, api, db: no process to clean
+          // note, obsidian, group, kanban, api, db: no process to clean
           break;
       }
     }

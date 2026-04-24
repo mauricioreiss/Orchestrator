@@ -24,6 +24,7 @@ const ALLOWED_INVOKE_CHANNELS = [
   "dialog:save",
   "fs_write_file",
   "send_notification",
+  "get_app_path",
 ] as const;
 
 type AllowedChannel = typeof ALLOWED_INVOKE_CHANNELS[number];

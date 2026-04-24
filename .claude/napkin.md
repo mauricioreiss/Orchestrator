@@ -122,6 +122,7 @@ npm run electron:rebuild                   # Rebuild native addons
 - Status Reset on Input (2026-04-23): PtyService.write/writeString reset status to active immediately on user keystroke
 - NoteNode Multi-Hop (2026-04-23): Note→VSCode→Terminal topology supported, terminal inherits VS Code's workspacePath
 - Smart Spawn (2026-04-23): Nodes spawn at viewport center with collision avoidance. viewportCenter() converts screen→flow coords, findOpenPosition() cascades +40/+40 per overlap (50px tolerance, max 20 iterations). All 13 addNode helpers updated. Monaco also uses smartSpawn (no position param).
+- Architect Prompt v2 (2026-04-23): buildArchitectPrompt rewritten as "Principal Solutions Architect". 1-2 questions per turn, gradual topic coverage, deduces best practices from short answers, generates personas only when guardrails are strict enough. Personas include clean code, domain boundaries, security rules.
 
 ## NEXT UP
 - Manual QA: test all features end-to-end after all fixes

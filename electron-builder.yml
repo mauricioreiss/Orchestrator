@@ -8,6 +8,12 @@ files:
   - electron/dist/**
   - node_modules/**
   - package.json
+extraResources:
+  - from: "_templates_personas"
+    to: "_templates_personas"
+asarUnpack:
+  - "node_modules/better-sqlite3/**"
+  - "node_modules/node-pty/**"
 win:
   target: nsis
 nsis:

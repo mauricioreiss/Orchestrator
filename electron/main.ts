@@ -47,7 +47,7 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false, // node-pty requires non-sandboxed main process
-      webviewTag: true, // BrowserNode uses <webview> instead of <iframe>
+      webviewTag: true, // kept for potential future embedded browser needs
     },
     titleBarStyle: "hidden",
     titleBarOverlay: {
@@ -153,6 +153,14 @@ app.whenReady().then(() => {
     return result.filePath ?? null;
   });
 
+  // App path handler — returns base path for bundled resources
+  ipcMain.handle("get_app_path", () => {
+    if (app.isPackaged) {
+      return process.resourcesPath;
+    }
+    return process.cwd();
+  });
+
   // File write handler (for Persona Architect dossier output)
   ipcMain.handle("fs_write_file", async (_event, args: { filePath: string; content: string }) => {
     const fs = await import("fs/promises");
@@ -228,4 +236,8 @@ process.on("uncaughtException", (err) => {
     return; // Silently swallow known node-pty Windows noise
   }
   log.error("[orchestrated-space] uncaught exception:", err.message, err.stack);
+});
+
+process.on("unhandledRejection", (reason) => {
+  log.error("[orchestrated-space] unhandled rejection:", String(reason));
 });

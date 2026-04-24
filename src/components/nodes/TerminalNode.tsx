@@ -169,7 +169,14 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
       ({ status }) => {
         setPtyStatus(status as "active" | "awaiting_approval" | "idle");
         if (status === "awaiting_approval") {
-          toast.warning(`Terminal "${label}" pede aprovacao.`, { duration: 6000 });
+          toast.warning(`Terminal "${label}" pede aprovacao.`, {
+            id: `approval-${ptyId}`,
+            duration: Infinity,
+            closeButton: true,
+          });
+        } else {
+          // Dismiss persistent approval toast when status changes away
+          toast.dismiss(`approval-${ptyId}`);
         }
         if (status === "idle") {
           toast.success(`Terminal "${label}" concluiu a tarefa.`, { duration: 4000 });

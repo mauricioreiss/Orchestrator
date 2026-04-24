@@ -214,7 +214,9 @@ export class PtyService {
 
     // CRITICAL: second arg MUST be an explicit Array literal `[]`.
     // node-pty's C++ binding crashes if args is undefined or not an Array.
-    // useConpty: false avoids AttachConsole failed crash from conpty_console_list.
+    // useConpty MUST be true — winpty was removed from binding.gyp during rebuild.
+    // AttachConsole errors from conpty_console_list are harmless noise,
+    // swallowed by the uncaughtException handler in main.ts.
     const proc = pty.spawn(safeShell, [], {
       name: "xterm-color",
       cols: safeCols,
@@ -733,7 +735,7 @@ export class PtyService {
       if (status === "idle") {
         new Notification({ title: "Tarefa Concluida", body: `Agente "${label}" concluiu a tarefa.` }).show();
       } else if (status === "awaiting_approval") {
-        new Notification({ title: "Aprovacao Necessaria", body: `Agente "${label}" precisa de aprovacao.` }).show();
+        new Notification({ title: "Aprovacao Necessaria", body: `Agente "${label}" precisa de aprovacao.`, urgency: "critical" }).show();
       }
     }
   }

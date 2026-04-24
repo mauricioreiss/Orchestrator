@@ -119,14 +119,6 @@ export default function CommandPalette({ onOpenSettings }: CommandPaletteProps) 
                 <span>Create Database</span>
               </Command.Item>
 
-              <Command.Item onSelect={() => run(() => store.addBrowserNode(getCenter()))}>
-                <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ color: "#f43f5e" }}>
-                  <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.4" />
-                  <path d="M2.5 10h15" stroke="currentColor" strokeWidth="1.2" />
-                </svg>
-                <span>Create Browser</span>
-              </Command.Item>
-
               <Command.Item onSelect={() => run(() => store.addArchitectNode(getCenter()))}>
                 <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ color: "#8b5cf6" }}>
                   <path d="M10 2l7 4v8l-7 4-7-4V6l7-4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />

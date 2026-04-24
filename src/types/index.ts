@@ -66,13 +66,6 @@ export interface GroupNodeData {
   [key: string]: unknown;
 }
 
-export interface BrowserNodeData {
-  type: "browser";
-  label: string;
-  url: string;
-  [key: string]: unknown;
-}
-
 export type CardPriority = "green" | "yellow" | "orange" | "red";
 
 export interface KanbanCard {
@@ -173,7 +166,6 @@ export type CanvasNodeData =
   | VSCodeNodeData
   | ObsidianNodeData
   | GroupNodeData
-  | BrowserNodeData
   | KanbanNodeData
   | ApiNodeData
   | DbNodeData
