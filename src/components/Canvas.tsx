@@ -29,6 +29,8 @@ import MonacoNode from "./nodes/MonacoNode";
 import MarkdownNode from "./nodes/MarkdownNode";
 import ArchitectNode from "./nodes/ArchitectNode";
 import ProjectGroupNode from "./nodes/ProjectGroupNode";
+import GitNode from "./nodes/GitNode";
+import LogViewerNode from "./nodes/LogViewerNode";
 import NodeErrorBoundary from "./nodes/NodeErrorBoundary";
 import FlowEdge from "./edges/FlowEdge";
 import StatusBar from "./StatusBar";
@@ -72,6 +74,8 @@ const nodeTypes: NodeTypes = {
   monaco: withErrorBoundary(MonacoNode),
   markdown: withErrorBoundary(MarkdownNode),
   architect: withErrorBoundary(ArchitectNode),
+  git: withErrorBoundary(GitNode),
+  logviewer: withErrorBoundary(LogViewerNode),
   group: withErrorBoundary(ProjectGroupNode),
 };
 
@@ -125,6 +129,8 @@ export default function Canvas() {
       else if (sourceNode?.type === "monaco") stroke = "#6366f1";
       else if (sourceNode?.type === "markdown") stroke = "#64748b";
       else if (sourceNode?.type === "architect") stroke = "#8b5cf6";
+      else if (sourceNode?.type === "git") stroke = "#f43f5e";
+      else if (sourceNode?.type === "logviewer") stroke = "#22c55e";
       else if (sourceNode?.type === "terminal") {
         const role = (sourceNode.data as TerminalNodeData)?.role ?? "Agent";
         stroke = NODE_EDGE_COLORS[role] ?? "#A855F7";
@@ -265,6 +271,8 @@ export default function Canvas() {
             if (node.type === "monaco") return "#6366f1";
             if (node.type === "markdown") return "#64748b";
             if (node.type === "architect") return "#8b5cf6";
+            if (node.type === "git") return "#f43f5e";
+            if (node.type === "logviewer") return "#22c55e";
             if (node.type === "group") return (node.data as GroupNodeData)?.color ?? "#3b82f6";
             return "#A855F7";
           }}

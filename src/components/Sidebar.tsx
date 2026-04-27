@@ -97,6 +97,31 @@ const NODE_BUTTONS = [
     ),
   },
   {
+    key: "git",
+    label: "Git",
+    color: "#f43f5e",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <circle cx="6" cy="6" r="2" stroke="currentColor" strokeWidth="1.4" />
+        <circle cx="14" cy="6" r="2" stroke="currentColor" strokeWidth="1.4" />
+        <circle cx="10" cy="16" r="2" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M6 8v2a4 4 0 004 4M14 8v2a4 4 0 01-4 4" stroke="currentColor" strokeWidth="1.4" />
+      </svg>
+    ),
+  },
+  {
+    key: "logviewer",
+    label: "Log Viewer",
+    color: "#22c55e",
+    icon: (
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+        <rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M7 7h6M7 10h4M7 13h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        <circle cx="14" cy="14" r="1" fill="currentColor" />
+      </svg>
+    ),
+  },
+  {
     key: "group",
     label: "Group",
     color: "#64748b",
@@ -120,6 +145,8 @@ const ADD_ACTIONS: Record<NodeKey, (store: ReturnType<typeof useCanvasStore.getS
   db: (s) => s.addDbNode(),
   markdown: (s) => s.addMarkdownNode(),
   architect: (s) => s.addArchitectNode(),
+  git: (s) => s.addGitNode(),
+  logviewer: (s) => s.addLogViewerNode(),
   group: (s) => s.addGroupNode(),
 };
 

@@ -50,6 +50,8 @@ interface CanvasStore {
   addGroupNode: (position?: { x: number; y: number }) => void;
   addMarkdownNode: (position?: { x: number; y: number }) => void;
   addArchitectNode: (position?: { x: number; y: number }) => void;
+  addGitNode: (position?: { x: number; y: number }) => void;
+  addLogViewerNode: (position?: { x: number; y: number }) => void;
   addMonacoNode: (filePath: string, rootDir: string) => void;
 
   // Persistence
@@ -337,6 +339,30 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       type: "architect",
       position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
       data: { type: "architect", label: `Architect ${count}` },
+      style: { width: W, height: H },
+    });
+  },
+
+  addGitNode: (position?) => {
+    const W = 400, H = 380;
+    const count = get().nodes.filter((n) => n.type === "git").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "git",
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
+      data: { type: "git", label: `Git ${count}` },
+      style: { width: W, height: H },
+    });
+  },
+
+  addLogViewerNode: (position?) => {
+    const W = 550, H = 400;
+    const count = get().nodes.filter((n) => n.type === "logviewer").length + 1;
+    get().addNode({
+      id: crypto.randomUUID(),
+      type: "logviewer",
+      position: position ?? smartSpawn(get().nodes, get().viewport, W, H),
+      data: { type: "logviewer", label: `Log ${count}` },
       style: { width: W, height: H },
     });
   },

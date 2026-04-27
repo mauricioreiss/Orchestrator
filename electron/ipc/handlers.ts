@@ -1,5 +1,8 @@
 import { ipcMain, Notification, type BrowserWindow } from "electron";
-import { createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
+import { execSync } from "child_process";
+import fs from "fs";
+import path from "path";
 import type { PtyService } from "../services/PtyService";
 import type { CodeServerService } from "../services/CodeServerService";
 import type { ContextService } from "../services/ContextService";
@@ -13,6 +16,8 @@ import type { FileSystemService } from "../services/FileSystemService";
 import type { PersonaArchitectService } from "../services/PersonaArchitectService";
 import log from "../log";
 import type { CanvasGraph, ContextAction, SyncResult, ConnectedNodeInfo } from "../types";
+
+const tailWatchers = new Map<string, { watcher: fs.FSWatcher; filePath: string; position: number }>();
 
 interface Services {
   pty: PtyService;
@@ -387,5 +392,145 @@ export function registerIpcHandlers(services: Services): void {
       nodeLabel,
       command,
     });
+  });
+
+  // === Git (3) ===
+  ipcMain.handle("git_status", (_e, args: { cwd: string }) => {
+    try {
+      return execSync("git status --short", {
+        cwd: args.cwd,
+        encoding: "utf-8",
+        timeout: 10000,
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`git status failed: ${msg}`);
+    }
+  });
+
+  ipcMain.handle("git_commit", (_e, args: { cwd: string; message: string }) => {
+    try {
+      execSync("git add .", {
+        cwd: args.cwd,
+        encoding: "utf-8",
+        timeout: 30000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return execSync(`git commit -m "${args.message.replace(/"/g, '\\"')}"`, {
+        cwd: args.cwd,
+        encoding: "utf-8",
+        timeout: 30000,
+        stdio: ["pipe", "pipe", "pipe"],
+      }).trim();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`git commit failed: ${msg}`);
+    }
+  });
+
+  ipcMain.handle("git_reset_hard", (_e, args: { cwd: string }) => {
+    try {
+      execSync("git reset --hard", {
+        cwd: args.cwd,
+        encoding: "utf-8",
+        timeout: 15000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      execSync("git clean -fd", {
+        cwd: args.cwd,
+        encoding: "utf-8",
+        timeout: 15000,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+      return "Reset complete";
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`git reset failed: ${msg}`);
+    }
+  });
+
+  // === File Tail (2) ===
+  ipcMain.handle("tail_start", (_e, args: { filePath: string }) => {
+    const filePath = path.resolve(args.filePath);
+    const watchId = randomUUID();
+
+    let content = "";
+    let position = 0;
+    try {
+      const stat = fs.statSync(filePath);
+      // Read last 100KB max for initial load
+      const readStart = Math.max(0, stat.size - 102400);
+      const fd = fs.openSync(filePath, "r");
+      const buf = Buffer.alloc(stat.size - readStart);
+      fs.readSync(fd, buf, 0, buf.length, readStart);
+      fs.closeSync(fd);
+      content = buf.toString("utf-8");
+      position = stat.size;
+    } catch {
+      // File may not exist yet, start empty
+    }
+
+    try {
+      const watcher = fs.watch(filePath, () => {
+        try {
+          const stat = fs.statSync(filePath);
+          const entry = tailWatchers.get(watchId);
+          if (!entry) return;
+
+          if (stat.size > entry.position) {
+            const fd = fs.openSync(filePath, "r");
+            const buf = Buffer.alloc(stat.size - entry.position);
+            fs.readSync(fd, buf, 0, buf.length, entry.position);
+            fs.closeSync(fd);
+            entry.position = stat.size;
+
+            const win = getWindow();
+            if (win && !win.isDestroyed()) {
+              win.webContents.send(`file-tail-${watchId}`, buf.toString("utf-8"));
+            }
+          } else if (stat.size < entry.position) {
+            // File was truncated (log rotation), re-read from start
+            const fd = fs.openSync(filePath, "r");
+            const buf = Buffer.alloc(stat.size);
+            fs.readSync(fd, buf, 0, buf.length, 0);
+            fs.closeSync(fd);
+            entry.position = stat.size;
+
+            const win = getWindow();
+            if (win && !win.isDestroyed()) {
+              win.webContents.send(`file-tail-${watchId}`, "\x1b[2J" + buf.toString("utf-8"));
+            }
+          }
+        } catch {
+          // File may have been deleted
+        }
+      });
+
+      tailWatchers.set(watchId, { watcher, filePath, position });
+      log.info(`[orchestrated-space] Started tailing ${filePath} (watchId: ${watchId})`);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new Error(`Failed to watch file: ${msg}`);
+    }
+
+    return { watchId, content };
+  });
+
+  ipcMain.handle("tail_stop", (_e, args: { watchId: string }) => {
+    const entry = tailWatchers.get(args.watchId);
+    if (entry) {
+      entry.watcher.close();
+      tailWatchers.delete(args.watchId);
+      log.info(`[orchestrated-space] Stopped tailing ${entry.filePath}`);
+    }
+  });
+
+  // === Kill All (1) ===
+  ipcMain.handle("kill_all_processes", () => {
+    pty.killAll();
+    codeServer.stopAll();
+    log.info("[orchestrated-space] Killed all processes");
+    return { success: true };
   });
 }

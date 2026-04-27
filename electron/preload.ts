@@ -25,11 +25,14 @@ const ALLOWED_INVOKE_CHANNELS = [
   "fs_write_file",
   "send_notification",
   "get_app_path",
+  "git_status", "git_commit", "git_reset_hard",
+  "tail_start", "tail_stop",
+  "kill_all_processes",
 ] as const;
 
 type AllowedChannel = typeof ALLOWED_INVOKE_CHANNELS[number];
 
-const ALLOWED_EVENT_PREFIXES = ["pty-output-", "pty-exit-", "context-injection-", "pty-broadcast", "agent-approval", "swarm-dispatch", "pty-permission-", "pty-status-"];
+const ALLOWED_EVENT_PREFIXES = ["pty-output-", "pty-exit-", "context-injection-", "pty-broadcast", "agent-approval", "swarm-dispatch", "pty-permission-", "pty-status-", "file-tail-"];
 
 contextBridge.exposeInMainWorld("maestriAPI", {
   invoke: (channel: string, args?: Record<string, unknown>) => {

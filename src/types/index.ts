@@ -155,6 +155,20 @@ export interface GlobalMonitorNodeData {
   [key: string]: unknown;
 }
 
+export interface GitNodeData {
+  type: "git";
+  label: string;
+  cwd?: string;
+  [key: string]: unknown;
+}
+
+export interface LogViewerNodeData {
+  type: "logviewer";
+  label: string;
+  filePath?: string;
+  [key: string]: unknown;
+}
+
 export const GROUP_COLORS = [
   "#ef4444", "#f97316", "#f59e0b", "#22c55e", "#14b8a6",
   "#06b6d4", "#3b82f6", "#8b5cf6", "#ec4899", "#64748b",
@@ -172,7 +186,9 @@ export type CanvasNodeData =
   | MonacoNodeData
   | MarkdownNodeData
   | ArchitectNodeData
-  | GlobalMonitorNodeData;
+  | GlobalMonitorNodeData
+  | GitNodeData
+  | LogViewerNodeData;
 
 // -- Persona Architect types --
 
