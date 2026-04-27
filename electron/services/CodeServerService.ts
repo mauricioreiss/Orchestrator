@@ -107,11 +107,31 @@ export class CodeServerService {
       );
     }
 
+    const ws = workspace ?? "";
+
+    // Singleton: reuse existing server when another node already serves this workspace
+    const existing = this.findByWorkspace(ws);
+    if (existing) {
+      log.info(
+        `[orchestrated-space] Reusing VS Code server on port ${existing.port} for workspace "${ws}" (instance ${instanceId})`,
+      );
+      this.instances.set(instanceId, existing);
+      return {
+        instance_id: instanceId,
+        running: true,
+        ready: this.tcpCheck(existing.port),
+        port: existing.port,
+        url: existing.url,
+        workspace: ws,
+        token: existing.token,
+        error_output: null,
+      };
+    }
+
     const primaryBinary = binaryPath ?? "code";
     const port = this.allocatePort();
     const token = uuidv4();
     const url = `http://127.0.0.1:${port}`;
-    const ws = workspace ?? "";
 
     log.info(
       `[orchestrated-space] Starting VS Code server ${instanceId} on port ${port}`,
@@ -208,6 +228,16 @@ export class CodeServerService {
     if (!inst) return; // Already stopped or never started — no-op
 
     this.instances.delete(instanceId);
+
+    // If another instance still shares this server process, keep it alive
+    for (const other of this.instances.values()) {
+      if (other === inst) {
+        log.info(
+          `[orchestrated-space] Keeping VS Code server on port ${inst.port} alive (shared by another node)`,
+        );
+        return;
+      }
+    }
 
     if (inst.launcherExited) {
       this.killByPort(inst.port);
@@ -380,6 +410,24 @@ export class CodeServerService {
 
   count(): number {
     return this.instances.size;
+  }
+
+  // -----------------------------------------------------------------------
+  // Internal: find existing instance serving the same workspace (singleton)
+  // -----------------------------------------------------------------------
+
+  private findByWorkspace(workspace: string): CodeServerInstance | null {
+    if (!workspace) return null;
+    const normalized = path.resolve(workspace).toLowerCase();
+    for (const inst of this.instances.values()) {
+      if (
+        inst.workspace &&
+        path.resolve(inst.workspace).toLowerCase() === normalized
+      ) {
+        return inst;
+      }
+    }
+    return null;
   }
 
   // -----------------------------------------------------------------------

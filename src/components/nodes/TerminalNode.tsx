@@ -224,8 +224,8 @@ function TerminalNode({ id, data, selected, parentId }: NodeProps) {
     // Helper: sleep
     const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-    // Raw carriage return (char 13) — simulates physical Enter keypress
-    const forceEnter = Array.from(new TextEncoder().encode(String.fromCharCode(13)));
+    // CRLF (\r\n) — ConPTY on Windows needs both CR+LF for reliable Enter
+    const forceEnter = [13, 10];
 
     // Queue this boot behind any active boots to prevent race conditions
     const myBoot = bootQueue.then(async () => {
