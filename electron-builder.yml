@@ -1,23 +1,26 @@
-appId: com.orchestratedspace.app
-productName: Orchestrated Space
+appId: com.orchestrator.app
+productName: Orchestrator
 directories:
   output: release
   buildResources: build
 files:
   - dist/**
   - electron/dist/**
+  - electron/package.json
   - node_modules/**
   - package.json
 extraResources:
   - from: "_templates_personas"
     to: "_templates_personas"
+asar: true
 asarUnpack:
   - "node_modules/better-sqlite3/**"
   - "node_modules/node-pty/**"
 win:
-  target: nsis
+  target:
+    - nsis
+    - portable
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-asar: true

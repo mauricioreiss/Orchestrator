@@ -79,13 +79,13 @@ export default function LoginScreen() {
               fontFamily: "Inter, system-ui, sans-serif",
             }}
           >
-            Orchestrated Space
+            ORCHESTRATOR
           </h1>
           <p
             className="text-sm mt-1.5"
-            style={{ color: "var(--mx-text-secondary)" }}
+            style={{ color: "var(--mx-text-secondary)", letterSpacing: "0.15em", textTransform: "uppercase" }}
           >
-            War Room OS para Dev Teams
+            AI - Driven Orchestration
           </p>
         </div>
 

@@ -68,7 +68,7 @@ function createWindow(): void {
     mainWindow.loadURL("http://localhost:1420");
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+    mainWindow.loadFile(path.join(__dirname, "..", "..", "dist", "index.html"));
   }
 
   mainWindow.on("closed", () => {

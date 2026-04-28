@@ -241,6 +241,23 @@ export default function Canvas() {
         minZoom={0.1}
         maxZoom={2}
       >
+        <Panel position="top-left" style={{ marginTop: 44, marginLeft: 8, pointerEvents: "none" }}>
+          <div className="select-none" style={{ opacity: 0.35 }}>
+            <div
+              className="text-sm font-semibold tracking-wide"
+              style={{ color: "var(--mx-text)", letterSpacing: "0.08em" }}
+            >
+              ORCHESTRATOR
+            </div>
+            <div
+              className="text-[10px] mt-0.5"
+              style={{ color: "var(--mx-text-muted)", letterSpacing: "0.04em" }}
+            >
+              Orchestrator / canvas
+            </div>
+          </div>
+        </Panel>
+
         <Panel position="bottom-center">
           <StatusBar />
         </Panel>
