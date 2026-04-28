@@ -15,7 +15,7 @@ connected by edges that carry context, commands, and intelligence between them.
 
 <br/>
 
-[Download](#download) | [Features](#features) | [How It Works](#how-it-works) | [Architecture](#architecture) | [Getting Started](#getting-started) | [Roadmap](#roadmap)
+[Download](#download) | [Features](#features) | [How It Works](#how-it-works) | [Architecture](#architecture) | [Getting Started](#getting-started) | [Roadmap](#roadmap) | [Portugues](README.pt-BR.md)
 
 <br/>
 
@@ -329,7 +329,7 @@ Just connect the nodes and let the system do the wiring.
 
 <div align="center">
 
-Built by [Mauri](https://github.com/mauricioreiss) | Oduo Tech Team
+Built by [Mauri](https://github.com/mauricioreiss)
 
 **ORCHESTRATOR** is currently in **Alpha (v0.2.0)**.
 
