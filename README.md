@@ -1,8 +1,8 @@
 <div align="center">
 
-# Orchestrated Space
+# ORCHESTRATOR
 
-**The visual operating system for developers who orchestrate AI agents.**
+**AI-Driven Orchestration**
 
 A desktop canvas where terminals, code editors, AI agents, and dev tools live side by side,
 connected by edges that carry context, commands, and intelligence between them.
@@ -15,13 +15,26 @@ connected by edges that carry context, commands, and intelligence between them.
 
 <br/>
 
-[Features](#features) | [How It Works](#how-it-works) | [Architecture](#architecture) | [Getting Started](#getting-started) | [Roadmap](#roadmap)
+[Download](#download) | [Features](#features) | [How It Works](#how-it-works) | [Architecture](#architecture) | [Getting Started](#getting-started) | [Roadmap](#roadmap)
 
 <br/>
 
 > Think **n8n meets VS Code meets a multi-agent terminal orchestrator** -- all on an infinite canvas.
 
 </div>
+
+---
+
+## Download
+
+**Windows (x64)** -- grab the latest build from [GitHub Releases](https://github.com/mauricioreiss/Orchestrator/releases).
+
+| File | Description |
+|------|-------------|
+| `Orchestrator-Setup-*.exe` | NSIS installer (recommended) |
+| `Orchestrator-*-portable.exe` | Portable, no install needed |
+
+> Requires Windows 10/11. macOS and Linux support planned.
 
 ---
 
@@ -36,7 +49,7 @@ Modern development with AI agents is chaos:
 
 ## The Solution
 
-Orchestrated Space puts everything on a single infinite canvas. You draw edges between nodes, and the system propagates context, dispatches AI commands, and monitors status automatically.
+ORCHESTRATOR puts everything on a single infinite canvas. You draw edges between nodes, and the system propagates context, dispatches AI commands, and monitors status automatically.
 
 **One screen. Full awareness. Zero tab-switching.**
 
@@ -46,16 +59,18 @@ Orchestrated Space puts everything on a single infinite canvas. You draw edges b
 
 ### Visual Node Canvas
 
-Drag, connect, and orchestrate 11 specialized node types on an infinite canvas with magnetic edges, circuit-style routing, and glassmorphism UI.
+Drag, connect, and orchestrate 13 specialized node types on an infinite canvas with magnetic edges, circuit-style routing, and glassmorphism UI.
 
 | Node | What it does |
 |------|-------------|
 | **Terminal** | Live PTY shell (PowerShell/bash) with xterm.js. Supports role badges, boot queues, and output piping between terminals. |
 | **Note** | The orchestrator hub. Write a command in natural language, connect it to terminals, and the AI figures out which terminal gets which command. |
 | **VS Code** | Full VS Code Server embedded in the canvas. Pick a folder, get a complete IDE -- syntax highlighting, extensions, git, everything. |
-| **Architect** | AI-powered project interview. It asks about your stack, requirements, and constraints, then generates domain-specific agent personas (backend, frontend, security) ready to inject into terminals. |
+| **Architect** | AI-powered project interview. It asks about your stack, requirements, and constraints, then generates domain-specific agent personas ready to inject into terminals. |
 | **Workspace** | File tree + Monaco editor in a single node. Browse, open, and edit files without leaving the canvas. |
 | **Markdown** | Smart output panel with edit/preview toggle. GitHub-flavored markdown with full prose styling. |
+| **Git** | Visual git control. Color-coded status display (modified, added, deleted, untracked), one-click commit, and two-stage emergency revert with auto-disarm safety. |
+| **Log Viewer** | Real-time file tailing with Matrix-style green-on-black display. Pause/resume, 10k line cap, auto-scroll, and log rotation detection. |
 | **Kanban** | Task board with drag-and-drop columns, priority colors, due dates, and overdue alerts. |
 | **API Client** | HTTP request builder (GET/POST/PUT/DELETE/PATCH) with headers, body, and live response display. |
 | **Database** | SQL query editor with result display. Parameterized queries only. |
@@ -138,6 +153,8 @@ Then it generates **domain-specific persona files** (e.g., `backend_persona.md`,
 `Ctrl+K` opens a command palette (powered by [cmdk](https://cmdk.paco.me/)) for quick actions:
 
 - Create any node type instantly at viewport center
+- Search and focus existing nodes by name
+- Slash commands: `/kill-all`, `/add-terminal`, `/add-git`, `/add-log`
 - Navigate to any project group with smooth zoom transitions
 - Toggle settings and themes
 
@@ -148,7 +165,7 @@ Nodes spawn with **collision avoidance** -- no overlapping, no manual reposition
 ## How It Works
 
 ```
-+-------------------+          IPC (39 commands)         +-------------------+
++-------------------+          IPC (45 commands)         +-------------------+
 |                   |  <-------------------------------> |                   |
 |    React SPA      |        window.maestriAPI            |   Electron Main   |
 |                   |        (contextBridge)              |                   |
@@ -182,16 +199,16 @@ Nodes spawn with **collision avoidance** -- no overlapping, no manual reposition
 ```
 src/
   components/
-    Canvas.tsx              # React Flow canvas + 11 node types
+    Canvas.tsx              # React Flow canvas + 13 node types
     Sidebar.tsx             # Node creation + project navigation
-    CommandPalette.tsx      # Ctrl+K quick actions
+    CommandPalette.tsx      # Ctrl+K quick actions + slash commands
     GlobalStatusHUD.tsx     # Terminal status monitor panel
     LoginScreen.tsx         # Glassmorphism splash screen
-    nodes/                  # 11 specialized node components
+    nodes/                  # 13 specialized node components
     edges/
       FlowEdge.tsx          # Circuit-style routing + status animations
   store/
-    canvasStore.ts          # Zustand: graph state + 12 addNode helpers
+    canvasStore.ts          # Zustand: graph state + 14 addNode helpers
   hooks/
     useCwdCascade.ts        # Reactive CWD propagation between nodes
     useSwarmRouter.ts       # Edge flash animations on AI dispatch
@@ -201,12 +218,12 @@ electron/
   main.ts                   # BrowserWindow, service init, security headers
   preload.ts                # contextBridge with channel whitelisting
   ipc/
-    handlers.ts             # 39 IPC command handlers
+    handlers.ts             # 45 IPC command handlers
   services/
     PtyService.ts           # node-pty wrapper + status detection
     TranslatorService.ts    # AI orchestration + SEND_TO dispatch
     PersistenceService.ts   # SQLite + encrypted settings
-    CodeServerService.ts    # VS Code Server lifecycle
+    CodeServerService.ts    # VS Code Server lifecycle (singleton per workspace)
     ArchitectService.ts     # LLM interview + persona generation
     FileSystemService.ts    # Safe FS reader (path traversal prevention)
 ```
@@ -245,8 +262,8 @@ electron/
 ### Install
 
 ```bash
-git clone https://github.com/your-username/orchestrated-space.git
-cd orchestrated-space
+git clone https://github.com/mauricioreiss/Orchestrator.git
+cd Orchestrator
 npm install
 ```
 
@@ -261,10 +278,10 @@ This starts Vite (frontend hot-reload) and Electron concurrently.
 ### Build
 
 ```bash
-npm run electron:build
+npm run dist
 ```
 
-Produces a Windows installer (`.exe`) in the `release/` directory.
+Produces a Windows installer and portable `.exe` in the `release/` directory.
 
 ### Type Check
 
@@ -277,16 +294,19 @@ cd electron && npx tsc --noEmit  # Backend
 
 ## Roadmap
 
-- [x] 11 node types with universal handles
+- [x] 13 node types with universal handles
 - [x] AI multi-agent dispatch (Note &rarr; Terminals)
 - [x] Deep CWD cascade between connected nodes
 - [x] Terminal status monitor + native notifications
 - [x] Architect AI interview + persona generation
-- [x] Command Palette (Ctrl+K)
+- [x] Command Palette with slash commands (Ctrl+K)
 - [x] Auto-save to SQLite with visual indicator
 - [x] Glassmorphism UI with dark/light themes
 - [x] Smart spawn with collision avoidance
 - [x] Circuit-style edge routing with status animations
+- [x] Git node with one-click commit and emergency revert
+- [x] Log viewer with real-time file tailing
+- [x] Windows .exe build (NSIS installer + portable)
 - [ ] Workspace Tabs (multi-project isolation)
 - [ ] Plugin system for custom node types
 - [ ] macOS and Linux support
@@ -299,7 +319,7 @@ cd electron && npx tsc --noEmit  # Backend
 
 **Nodes are tools. Edges are context. The canvas is your brain.**
 
-Every developer's workflow is a graph. You have a terminal that depends on a project folder. A test runner that depends on a build step. An AI agent that needs to know what the other agents already did. Orchestrated Space makes that graph explicit, visual, and executable.
+Every developer's workflow is a graph. You have a terminal that depends on a project folder. A test runner that depends on a build step. An AI agent that needs to know what the other agents already did. ORCHESTRATOR makes that graph explicit, visual, and executable.
 
 No more alt-tabbing. No more copy-pasting paths. No more wondering which terminal finished.
 
@@ -309,8 +329,8 @@ Just connect the nodes and let the system do the wiring.
 
 <div align="center">
 
-Built by [Mauri](https://github.com/your-username) | Oduo Tech Team
+Built by [Mauri](https://github.com/mauricioreiss) | Oduo Tech Team
 
-**Orchestrated Space** is currently in **Alpha (v0.2.0)**.
+**ORCHESTRATOR** is currently in **Alpha (v0.2.0)**.
 
 </div>
