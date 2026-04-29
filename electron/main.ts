@@ -2,6 +2,7 @@
 process.env.NODE_NO_WARNINGS = "1";
 
 import { app, BrowserWindow, ipcMain, dialog, session } from "electron";
+import { autoUpdater } from "electron-updater";
 import { execSync } from "child_process";
 import path from "path";
 import log from "./log";
@@ -96,6 +97,48 @@ function initServices(): void {
   supervisorService = new SupervisorService(ptyService, codeServerService);
 }
 
+// ---------------------------------------------------------------------------
+// Auto-updater (electron-updater + GitHub Releases)
+// ---------------------------------------------------------------------------
+
+function setupAutoUpdater(): void {
+  autoUpdater.logger = log;
+
+  autoUpdater.on("update-available", () => {
+    if (!mainWindow) return;
+    dialog.showMessageBox(mainWindow, {
+      type: "info",
+      title: "Atualização disponível",
+      message: "Nova atualização encontrada. Baixando...",
+      buttons: ["OK"],
+    });
+  });
+
+  autoUpdater.on("update-downloaded", () => {
+    if (!mainWindow) return;
+    dialog
+      .showMessageBox(mainWindow, {
+        type: "question",
+        title: "Atualização pronta",
+        message: "Atualização baixada. Deseja reiniciar e instalar agora?",
+        buttons: ["Reiniciar", "Depois"],
+        defaultId: 0,
+        cancelId: 1,
+      })
+      .then((result) => {
+        if (result.response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+  });
+
+  autoUpdater.on("error", (err) => {
+    log.error("[auto-updater] Error:", err.message);
+  });
+
+  autoUpdater.checkForUpdatesAndNotify();
+}
+
 app.whenReady().then(() => {
   initServices();
   createWindow();
@@ -103,6 +146,11 @@ app.whenReady().then(() => {
   // Set window reference on PtyService so it can emit events
   if (mainWindow) {
     ptyService.setWindow(mainWindow);
+  }
+
+  // Check for updates (only in production builds)
+  if (app.isPackaged) {
+    setupAutoUpdater();
   }
 
   // Strip X-Frame-Options and CSP from ALL responses so iframes load any URL.

@@ -11,3 +11,5 @@ release/
 *.AppImage
 .DS_Store
 Thumbs.db
+.claude/
+nul

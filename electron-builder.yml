@@ -20,6 +20,10 @@ win:
   target:
     - nsis
     - portable
+publish:
+  - provider: github
+    owner: mauricioreiss
+    repo: Orchestrator
 nsis:
   oneClick: false
   perMachine: false

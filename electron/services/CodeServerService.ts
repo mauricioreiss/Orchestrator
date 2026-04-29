@@ -509,10 +509,12 @@ export class CodeServerService {
           env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
           cwd: vscodeRoot,
           stdio: ["ignore", "ignore", "pipe"],
+          detached: true,
         },
       );
 
-      log.info(`[orchestrated-space] Code.exe spawned (PID: ${child.pid})`);
+      child.unref();
+      log.info(`[orchestrated-space] Code.exe spawned detached (PID: ${child.pid})`);
       return child;
     } catch (e) {
       log.info(`[orchestrated-space] Code.exe spawn failed: ${e}`);
@@ -558,13 +560,16 @@ export class CodeServerService {
         stdio: ["ignore", "ignore", "pipe"],
         // .cmd/.bat files require shell: true on Windows
         shell: isCmd,
+        detached: true,
       };
 
       if (binaryDir && fs.existsSync(binaryDir)) {
         opts.cwd = binaryDir;
       }
 
-      return spawn(binary, args, opts);
+      const child = spawn(binary, args, opts);
+      child.unref();
+      return child;
     } catch (e) {
       log.info(`[orchestrated-space] spawn_serve_web failed: ${e}`);
       return null;
